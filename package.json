@@ -1,12 +1,12 @@
 {
   "name": "@lweight/xbrush-api-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for the XBrush AI media generation API",
   "license": "MIT",
   "author": "Lightweight Inc. <dev@lightweight.kr>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/lweight/xbrush-api-mcp.git"
+    "url": "git+https://github.com/lweight/xbrush-api-mcp.git"
   },
   "homepage": "https://github.com/lweight/xbrush-api-mcp#readme",
   "bugs": {
