@@ -41,11 +41,13 @@ describe("xbrush_file_upload", () => {
     expect(text).toContain("https://cdn.xbrush.ai/uploads/test.png");
   });
 
-  it("업로드 실패 → isError", async () => {
+  it("업로드 실패 → isError + 메시지 포함", async () => {
     mockedUpload.mockRejectedValueOnce(new Error("S3 upload failed: 403"));
     const result = await handlers.get("xbrush_file_upload")!({
       file_path: "/tmp/bad.png",
     });
     expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("S3 upload failed");
+    expect(result.content[0].text).toContain("Suggestion");
   });
 });

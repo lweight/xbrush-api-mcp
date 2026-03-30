@@ -84,12 +84,14 @@ describe("xbrush_get_request", () => {
     expect(text).toContain("GPU error");
   });
 
-  it("API 에러 → isError", async () => {
-    mockedApi.mockRejectedValueOnce(new Error("not found"));
+  it("API 에러 → isError + 메시지 포함", async () => {
+    mockedApi.mockRejectedValueOnce(new Error("request not found"));
     const result = await handlers.get("xbrush_get_request")!({
       request_id: "req" + "x".repeat(21),
     });
     expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("request not found");
+    expect(result.content[0].text).toContain("Suggestion");
   });
 });
 

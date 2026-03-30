@@ -95,13 +95,15 @@ describe("xbrush_image_generate", () => {
     expect(callArgs.data.seed).toBe(42);
   });
 
-  it("API 에러 → isError 결과", async () => {
+  it("API 에러 → isError 결과 + 메시지 포함", async () => {
     mockedApi.mockRejectedValueOnce(new Error("server down"));
     const result = await handlers.get("xbrush_image_generate")!({
       model: "x",
       prompt: "y",
     });
     expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("server down");
+    expect(result.content[0].text).toContain("Suggestion");
   });
 });
 
@@ -133,14 +135,16 @@ describe("xbrush_image_edit", () => {
     expect(callArgs.data.maskUrl).toBe("https://a.com/m.png");
   });
 
-  it("API 에러 → isError 결과", async () => {
-    mockedApi.mockRejectedValueOnce(new Error("fail"));
+  it("API 에러 → isError 결과 + 메시지 포함", async () => {
+    mockedApi.mockRejectedValueOnce(new Error("edit service unavailable"));
     const result = await handlers.get("xbrush_image_edit")!({
       model: "m",
       prompt: "p",
       image_url: "https://a.com/i.png",
     });
     expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("edit service unavailable");
+    expect(result.content[0].text).toContain("Suggestion");
   });
 });
 

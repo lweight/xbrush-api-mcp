@@ -102,6 +102,33 @@ describe("handleApiError", () => {
     expect(result.suggestion).toContain("server error");
   });
 
+  it("구조화된 에러 응답 — VALIDATION_ERROR", () => {
+    const axErr = makeAxiosError(400, {
+      error: { code: "VALIDATION_ERROR", message: "Invalid params" },
+    });
+    const result = handleApiError(axErr);
+    expect(result.code).toBe("VALIDATION_ERROR");
+    expect(result.suggestion).toContain("parameters");
+  });
+
+  it("구조화된 에러 응답 — GENERATION_FAILED", () => {
+    const axErr = makeAxiosError(500, {
+      error: { code: "GENERATION_FAILED", message: "GPU OOM" },
+    });
+    const result = handleApiError(axErr);
+    expect(result.code).toBe("GENERATION_FAILED");
+    expect(result.suggestion).toContain("Try again");
+  });
+
+  it("구조화된 에러 응답 — POLLER_ERROR", () => {
+    const axErr = makeAxiosError(500, {
+      error: { code: "POLLER_ERROR", message: "Poll timeout" },
+    });
+    const result = handleApiError(axErr);
+    expect(result.code).toBe("POLLER_ERROR");
+    expect(result.suggestion).toContain("xbrush_get_request");
+  });
+
   it("429 Rate limit", () => {
     const axErr = makeAxiosError(429, {});
     const result = handleApiError(axErr);
