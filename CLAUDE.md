@@ -28,6 +28,9 @@ src/
     └── requests.ts       ← get_request, list_requests, check_health
 ```
 
+## 요구사항
+- Node.js >= 18
+
 ## 개발
 
 ```bash
@@ -40,9 +43,27 @@ npm run dev          # watch 모드
 - `XBRUSH_API_KEY` (필수) — xbrush.ai 대시보드 > API Keys
 - `XBRUSH_BASE_URL` (선택) — 기본값 `https://api.xbrush.run`, dev: `https://api-dev.xbrush.run`
 
+## API 특성
+- **인증**: `X-API-Key` 헤더
+- **응답 truncation**: 25,000자 초과 시 자동 잘림
+- **타임아웃**: sync 120초, async POST 30초, GET 10초
+- **입력 검증**: Zod strict mode (미정의 필드 거부)
+- **Tool annotations**: `readOnlyHint`, `destructiveHint`, `idempotentHint` 명시
+
 ## Sync vs Async
 - **Sync**: `image_generate`, `image_remove_bg` — 결과 즉시 반환
 - **Async**: `image_edit`, `image_upscale` — request ID 반환 후 `get_request`로 폴링
+
+## 파일 업로드 플로우
+1. `xbrush_file_upload`로 presigned URL 획득
+2. S3에 파일 업로드
+3. CDN URL 반환 → `image_edit` 등 다른 도구의 입력으로 사용
+
+## 도구 추가 패턴
+1. `src/schemas/` — Zod 입력 스키마 정의
+2. `src/services/xbrush-client.ts` — API 호출 메서드 추가
+3. `src/tools/` — 도구 핸들러 작성 (register 함수에 추가)
+4. `src/index.ts` — 새 모듈이면 `registerXxxTools(server)` 등록
 
 ## 테스트
 - `test.ts` — 수동 테스트 스크립트
