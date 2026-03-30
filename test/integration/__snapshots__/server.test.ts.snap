@@ -1,0 +1,141 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`도구 스키마 스냅샷 > xbrush_get_request 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "description": "Request ID (starts with 'req', 24 characters).",
+      "minLength": 24,
+      "type": "string",
+    },
+  },
+  "required": [
+    "request_id",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "height": {
+      "description": "Output height in pixels (256-4096).",
+      "maximum": 4096,
+      "minimum": 256,
+      "type": "integer",
+    },
+    "image_url": {
+      "description": "URL of the source image to edit.",
+      "format": "uri",
+      "type": "string",
+    },
+    "mask_url": {
+      "description": "Mask image URL. White areas = edit, black areas = preserve.",
+      "format": "uri",
+      "type": "string",
+    },
+    "model": {
+      "description": "Image editing model (e.g. qwen-image-edit-re, gemini-2.5-flash-edit).",
+      "type": "string",
+    },
+    "n": {
+      "description": "Number of edited images (1-8). Default: 1.",
+      "maximum": 8,
+      "minimum": 1,
+      "type": "integer",
+    },
+    "prompt": {
+      "description": "Text instruction describing the desired edits.",
+      "type": "string",
+    },
+    "seed": {
+      "description": "Random seed for reproducible results.",
+      "type": "integer",
+    },
+    "width": {
+      "description": "Output width in pixels (256-4096).",
+      "maximum": 4096,
+      "minimum": 256,
+      "type": "integer",
+    },
+  },
+  "required": [
+    "model",
+    "prompt",
+    "image_url",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "height": {
+      "description": "Output height in pixels (256-4096). Default: 1024.",
+      "maximum": 4096,
+      "minimum": 256,
+      "type": "integer",
+    },
+    "model": {
+      "description": "Image model to use (e.g. z-image-turbo, flux-kontext). Use xbrush_list_models to see available models.",
+      "type": "string",
+    },
+    "n": {
+      "description": "Number of images to generate (1-8). Default: 1.",
+      "maximum": 8,
+      "minimum": 1,
+      "type": "integer",
+    },
+    "negative_prompt": {
+      "description": "Elements to exclude from the generated image.",
+      "type": "string",
+    },
+    "prompt": {
+      "description": "Text description of the image to generate.",
+      "type": "string",
+    },
+    "seed": {
+      "description": "Random seed for reproducible results.",
+      "type": "integer",
+    },
+    "width": {
+      "description": "Output width in pixels (256-4096). Default: 1024.",
+      "maximum": 4096,
+      "minimum": 256,
+      "type": "integer",
+    },
+  },
+  "required": [
+    "model",
+    "prompt",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`도구 스키마 스냅샷 > xbrush_list_models 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "category": {
+      "description": "Filter by category. Omit to list all models.",
+      "enum": [
+        "image",
+        "video",
+        "audio",
+      ],
+      "type": "string",
+    },
+  },
+  "type": "object",
+}
+`;
