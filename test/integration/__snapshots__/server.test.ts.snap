@@ -57,6 +57,10 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "description": "Random seed for reproducible results.",
       "type": "integer",
     },
+    "sync": {
+      "description": "If true, wait for result (sync). Default: false (async, poll with xbrush_get_request).",
+      "type": "boolean",
+    },
     "width": {
       "description": "Output width in pixels (256-4096).",
       "maximum": 4096,
@@ -105,6 +109,10 @@ exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
     "seed": {
       "description": "Random seed for reproducible results.",
       "type": "integer",
+    },
+    "sync": {
+      "description": "If false, submit async and poll with xbrush_get_request. Default: true (sync).",
+      "type": "boolean",
     },
     "width": {
       "description": "Output width in pixels (256-4096). Default: 1024.",

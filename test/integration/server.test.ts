@@ -23,6 +23,7 @@ import { registerImageTools } from "../../src/tools/image.js";
 import { registerRequestTools } from "../../src/tools/requests.js";
 import { registerModelTools } from "../../src/tools/models.js";
 import { registerFileUploadTools } from "../../src/tools/file-upload.js";
+import { registerVideoTools } from "../../src/tools/video.js";
 import type { XBrushSyncResponse } from "../../src/types.js";
 
 const mockedApi = vi.mocked(makeApiRequest);
@@ -46,6 +47,7 @@ beforeAll(async () => {
   );
 
   registerImageTools(mcpServer);
+  registerVideoTools(mcpServer);
   registerRequestTools(mcpServer);
   registerModelTools(mcpServer);
   registerFileUploadTools(mcpServer);
@@ -68,8 +70,8 @@ afterAll(async () => {
 // ── 도구 등록 검증 ───────────────────────────────────────────────────
 
 describe("도구 등록", () => {
-  it("도구 9개 등록", () => {
-    expect(tools).toHaveLength(9);
+  it("도구 11개 등록", () => {
+    expect(tools).toHaveLength(11);
   });
 
   it("도구 이름 목록 일치", () => {
@@ -84,6 +86,8 @@ describe("도구 등록", () => {
       "xbrush_image_upscale",
       "xbrush_list_models",
       "xbrush_list_requests",
+      "xbrush_video_generate",
+      "xbrush_video_upscale",
     ]);
   });
 

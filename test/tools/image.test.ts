@@ -95,6 +95,29 @@ describe("xbrush_image_generate", () => {
     expect(callArgs.data.seed).toBe(42);
   });
 
+  it("sync=false → async 모드 + /v1/image/generate 호출", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    const result = await handlers.get("xbrush_image_generate")!({
+      model: "z-image-turbo",
+      prompt: "a cat",
+      sync: false,
+    });
+    expect(result.content[0].text).toContain("async");
+    expect(result.content[0].text).toContain("xbrush_get_request");
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.url).toBe("/v1/image/generate");
+  });
+
+  it("sync 미지정 → 기본 sync 모드", async () => {
+    mockedApi.mockResolvedValueOnce(mockSync);
+    await handlers.get("xbrush_image_generate")!({
+      model: "z-image-turbo",
+      prompt: "a cat",
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.url).toBe("/v1/image/generate/sync");
+  });
+
   it("API 에러 → isError 결과 + 메시지 포함", async () => {
     mockedApi.mockRejectedValueOnce(new Error("server down"));
     const result = await handlers.get("xbrush_image_generate")!({
@@ -135,6 +158,30 @@ describe("xbrush_image_edit", () => {
     expect(callArgs.data.maskUrl).toBe("https://a.com/m.png");
   });
 
+  it("sync=true → sync 모드 + /v1/image/edit/sync 호출", async () => {
+    mockedApi.mockResolvedValueOnce(mockSync);
+    const result = await handlers.get("xbrush_image_edit")!({
+      model: "qwen-image-edit-re",
+      prompt: "make blue",
+      image_url: "https://assets.xbrush.ai/src.png",
+      sync: true,
+    });
+    expect(result.content[0].text).toContain("completed");
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.url).toBe("/v1/image/edit/sync");
+  });
+
+  it("sync 미지정 → 기본 async 모드", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    await handlers.get("xbrush_image_edit")!({
+      model: "m",
+      prompt: "p",
+      image_url: "https://a.com/i.png",
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.url).toBe("/v1/image/edit");
+  });
+
   it("API 에러 → isError 결과 + 메시지 포함", async () => {
     mockedApi.mockRejectedValueOnce(new Error("edit service unavailable"));
     const result = await handlers.get("xbrush_image_edit")!({
@@ -168,6 +215,26 @@ describe("xbrush_image_upscale", () => {
     });
     const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
     expect(callArgs.data.upscaleFactor).toBe(4);
+  });
+
+  it("sync=true → /v1/image/upscale/sync 호출", async () => {
+    mockedApi.mockResolvedValueOnce(mockSync);
+    const result = await handlers.get("xbrush_image_upscale")!({
+      image_url: "https://a.com/i.png",
+      sync: true,
+    });
+    expect(result.content[0].text).toContain("completed");
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.url).toBe("/v1/image/upscale/sync");
+  });
+
+  it("sync 미지정 → 기본 async 모드", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    await handlers.get("xbrush_image_upscale")!({
+      image_url: "https://a.com/i.png",
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.url).toBe("/v1/image/upscale");
   });
 });
 

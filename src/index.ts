@@ -20,6 +20,7 @@ import { registerImageTools } from "./tools/image.js";
 import { registerRequestTools } from "./tools/requests.js";
 import { registerModelTools } from "./tools/models.js";
 import { registerFileUploadTools } from "./tools/file-upload.js";
+import { registerVideoTools } from "./tools/video.js";
 
 // ── Read version from package.json ────────────────────────────────────
 
@@ -46,6 +47,7 @@ const server = new McpServer(
 // ── Register All Tools ────────────────────────────────────────────────
 
 registerImageTools(server); // 4 tools: generate, edit, upscale, remove_bg
+registerVideoTools(server); // 2 tools: video_generate, video_upscale
 registerRequestTools(server); // 3 tools: get_request, list_requests, check_health
 registerModelTools(server); // 1 tool:  list_models
 registerFileUploadTools(server); // 1 tool:  file_upload

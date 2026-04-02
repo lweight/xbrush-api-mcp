@@ -24,3 +24,9 @@ export const TIMEOUT_ASYNC_POST = 30_000;
  * Timeout for GET requests (10s).
  */
 export const TIMEOUT_GET = 10_000;
+
+/**
+ * Timeout for sync video operations (10 min).
+ * Video generation/upscale can take 2-10 minutes.
+ */
+export const TIMEOUT_VIDEO_SYNC = 600_000;

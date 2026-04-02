@@ -51,6 +51,16 @@ describe("ImageGenerateSchema", () => {
     expect(() => ImageGenerateSchema.parse({ ...base, n: 10 })).toThrow();
   });
 
+  it("sync=true 유효", () => {
+    const result = ImageGenerateSchema.parse({ ...base, sync: true });
+    expect(result.sync).toBe(true);
+  });
+
+  it("sync=false 유효", () => {
+    const result = ImageGenerateSchema.parse({ ...base, sync: false });
+    expect(result.sync).toBe(false);
+  });
+
   it("미정의 필드 거부 (strict)", () => {
     expect(() =>
       ImageGenerateSchema.parse({ ...base, unknown_field: true })
@@ -90,6 +100,11 @@ describe("ImageEditSchema", () => {
     expect(result.n).toBe(2);
   });
 
+  it("sync=true 유효", () => {
+    const result = ImageEditSchema.parse({ ...base, sync: true });
+    expect(result.sync).toBe(true);
+  });
+
   it("미정의 필드 거부", () => {
     expect(() =>
       ImageEditSchema.parse({ ...base, style: "anime" })
@@ -120,6 +135,11 @@ describe("ImageUpscaleSchema", () => {
     expect(() =>
       ImageUpscaleSchema.parse({ ...base, upscale_factor: 1 })
     ).toThrow();
+  });
+
+  it("sync=true 유효", () => {
+    const result = ImageUpscaleSchema.parse({ ...base, sync: true });
+    expect(result.sync).toBe(true);
   });
 });
 

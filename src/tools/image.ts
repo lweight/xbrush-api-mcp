@@ -61,7 +61,7 @@ export function registerImageTools(server: McpServer): void {
       title: "Generate Image",
       description: [
         "Generate images from a text prompt using XBrush AI models.",
-        "Returns image URLs directly (sync).",
+        "By default sync (returns URLs directly). Set sync=false for async.",
         "",
         "Args:",
         "  model (string, required): Model ID (e.g. z-image-turbo). Use xbrush_list_models to see options.",
@@ -71,6 +71,7 @@ export function registerImageTools(server: McpServer): void {
         "  width (int, optional): Width in pixels (256-4096). Default: 1024.",
         "  height (int, optional): Height in pixels (256-4096). Default: 1024.",
         "  seed (int, optional): Random seed for reproducibility.",
+        "  sync (bool, optional): Default: true. Set false for async.",
       ].join("\n"),
       inputSchema: ImageGenerateSchema,
       annotations: {
@@ -92,21 +93,32 @@ export function registerImageTools(server: McpServer): void {
         if (args.height !== undefined) body.height = args.height;
         if (args.seed !== undefined) body.seed = args.seed;
 
-        const response = await makeApiRequest<XBrushSyncResponse>({
-          method: "POST",
-          url: "/v1/image/generate/sync",
-          data: body,
-          timeout: TIMEOUT_SYNC,
-        });
+        const useSync = args.sync !== false;
 
-        return buildToolResult(formatSyncResult(response, "Image generation"));
+        if (useSync) {
+          const response = await makeApiRequest<XBrushSyncResponse>({
+            method: "POST",
+            url: "/v1/image/generate/sync",
+            data: body,
+            timeout: TIMEOUT_SYNC,
+          });
+          return buildToolResult(formatSyncResult(response, "Image generation"));
+        } else {
+          const response = await makeApiRequest<XBrushAsyncResponse>({
+            method: "POST",
+            url: "/v1/image/generate",
+            data: body,
+            timeout: TIMEOUT_ASYNC_POST,
+          });
+          return buildToolResult(formatAsyncResult(response, "Image generation"));
+        }
       } catch (error) {
         return handleToolError(error);
       }
     }
   );
 
-  // ── xbrush_image_edit (async) ───────────────────────────────────────
+  // ── xbrush_image_edit (default async) ──────────────────────────────
 
   server.registerTool(
     "xbrush_image_edit",
@@ -114,7 +126,7 @@ export function registerImageTools(server: McpServer): void {
       title: "Edit Image",
       description: [
         "Edit an image with text instructions (inpaint/outpaint).",
-        "This is an async operation. Use xbrush_get_request to check the result.",
+        "By default async. Set sync=true to wait for result directly.",
         "",
         "Args:",
         "  model (string, required): Edit model (e.g. qwen-image-edit-re, gemini-2.5-flash-edit).",
@@ -125,6 +137,7 @@ export function registerImageTools(server: McpServer): void {
         "  width (int, optional): Output width (256-4096).",
         "  height (int, optional): Output height (256-4096).",
         "  seed (int, optional): Random seed.",
+        "  sync (bool, optional): Default: false. Set true for sync.",
       ].join("\n"),
       inputSchema: ImageEditSchema,
       annotations: {
@@ -147,21 +160,32 @@ export function registerImageTools(server: McpServer): void {
         if (args.height !== undefined) body.height = args.height;
         if (args.seed !== undefined) body.seed = args.seed;
 
-        const response = await makeApiRequest<XBrushAsyncResponse>({
-          method: "POST",
-          url: "/v1/image/edit",
-          data: body,
-          timeout: TIMEOUT_ASYNC_POST,
-        });
+        const useSync = args.sync === true;
 
-        return buildToolResult(formatAsyncResult(response, "Image edit"));
+        if (useSync) {
+          const response = await makeApiRequest<XBrushSyncResponse>({
+            method: "POST",
+            url: "/v1/image/edit/sync",
+            data: body,
+            timeout: TIMEOUT_SYNC,
+          });
+          return buildToolResult(formatSyncResult(response, "Image edit"));
+        } else {
+          const response = await makeApiRequest<XBrushAsyncResponse>({
+            method: "POST",
+            url: "/v1/image/edit",
+            data: body,
+            timeout: TIMEOUT_ASYNC_POST,
+          });
+          return buildToolResult(formatAsyncResult(response, "Image edit"));
+        }
       } catch (error) {
         return handleToolError(error);
       }
     }
   );
 
-  // ── xbrush_image_upscale (async) ────────────────────────────────────
+  // ── xbrush_image_upscale (default async) ───────────────────────────
 
   server.registerTool(
     "xbrush_image_upscale",
@@ -169,11 +193,12 @@ export function registerImageTools(server: McpServer): void {
       title: "Upscale Image",
       description: [
         "Upscale an image to higher resolution.",
-        "This is an async operation. Use xbrush_get_request to check the result.",
+        "By default async. Set sync=true to wait for result directly.",
         "",
         "Args:",
         "  image_url (string, required): URL of the image to upscale.",
         "  upscale_factor (int, optional): 2x or 4x. Default: 2.",
+        "  sync (bool, optional): Default: false. Set true for sync.",
       ].join("\n"),
       inputSchema: ImageUpscaleSchema,
       annotations: {
@@ -190,14 +215,25 @@ export function registerImageTools(server: McpServer): void {
         };
         if (args.upscale_factor !== undefined) body.upscaleFactor = args.upscale_factor;
 
-        const response = await makeApiRequest<XBrushAsyncResponse>({
-          method: "POST",
-          url: "/v1/image/upscale",
-          data: body,
-          timeout: TIMEOUT_ASYNC_POST,
-        });
+        const useSync = args.sync === true;
 
-        return buildToolResult(formatAsyncResult(response, "Image upscale"));
+        if (useSync) {
+          const response = await makeApiRequest<XBrushSyncResponse>({
+            method: "POST",
+            url: "/v1/image/upscale/sync",
+            data: body,
+            timeout: TIMEOUT_SYNC,
+          });
+          return buildToolResult(formatSyncResult(response, "Image upscale"));
+        } else {
+          const response = await makeApiRequest<XBrushAsyncResponse>({
+            method: "POST",
+            url: "/v1/image/upscale",
+            data: body,
+            timeout: TIMEOUT_ASYNC_POST,
+          });
+          return buildToolResult(formatAsyncResult(response, "Image upscale"));
+        }
       } catch (error) {
         return handleToolError(error);
       }
