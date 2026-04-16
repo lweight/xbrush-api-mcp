@@ -1,6 +1,49 @@
 # Changelog
 
-## 1.2.0 — 2026-04-16
+## 2.0.0 — 2026-04-16
+
+**Breaking changes:** All generation tools now use async-only flow. The `/sync` endpoints are no longer called.
+
+### Why
+
+The XBrush API's `/sync` endpoints have a dual-shape contract: fast models return `{status: "completed", output: {...}}` immediately, but slow models (e.g. `x-image-alpha`) return HTTP 202 + `{status: "pending", syncCompleted: false, output: undefined}` after their sync timeout — effectively async-shaped. The previous client code unconditionally read `r.output.imageUrls`, producing `Cannot read properties of undefined` on the slow-model path. MCP stdio tools also can't safely block for minutes.
+
+### Changed
+
+- All 11 generation tools now POST to async endpoints only and return a `request_id`. Callers must poll with `xbrush_get_request`.
+- `sync` parameter removed from all schemas (image/video/audio/lip-sync/watermark). Sending it now fails Zod strict validation.
+- `image_remove_bg`, `image_generate`, `watermark_add` — previously sync-default — now async like the rest.
+
+### Removed
+
+- `XBrushSyncResponse` type, `formatSyncResult`, `formatVideoSyncResult`, `formatLipSyncResult`.
+- `submitSyncOrAsync` helper → replaced by `submitAsync`.
+- `SYNC_TIMEOUTS` constant table and the deprecated `TIMEOUT_SYNC` / `TIMEOUT_VIDEO_SYNC` aliases.
+
+### Migration
+
+```js
+// v1.x
+await call("xbrush_image_generate", { model, prompt, sync: true });
+// → returns "Image generation completed.\n- Images: https://..."
+
+// v2.0
+const r = await call("xbrush_image_generate", { model, prompt });
+// → returns "Image generation submitted (async).\n- Request ID: req..."
+const id = parseRequestId(r);
+const done = await pollUntilCompleted(id, "xbrush_get_request");
+```
+
+### Tests
+
+- 243/243 unit + integration tests pass.
+- Real-API E2E: 28/28 covering all 16 tools.
+
+## 1.2.1 — 2026-04-16
+
+Same code as 2.0.0. Published into the 1.2.x line so that `^1.x` and `~1.2.x` consumers receive the async-only fix automatically. See 2.0.0 above for full details, breaking changes, and migration notes.
+
+## 1.2.0 — 2026-04-16 (unreleased)
 
 **Breaking changes:** None. Existing tool signatures and response formats are unchanged.
 
