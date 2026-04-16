@@ -32,6 +32,7 @@ describe("xbrush_file_upload", () => {
   it("성공", async () => {
     mockedUpload.mockResolvedValueOnce({
       cdnUrl: "https://cdn.xbrush.ai/uploads/test.png",
+      strategy: "presign",
     });
     const result = await handlers.get("xbrush_file_upload")!({
       file_path: "/tmp/test.png",
@@ -39,6 +40,7 @@ describe("xbrush_file_upload", () => {
     const text = result.content[0].text;
     expect(text).toContain("uploaded successfully");
     expect(text).toContain("https://cdn.xbrush.ai/uploads/test.png");
+    expect(text).toContain("Strategy");
   });
 
   it("업로드 실패 → isError + 메시지 포함", async () => {
@@ -49,5 +51,29 @@ describe("xbrush_file_upload", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("S3 upload failed");
     expect(result.content[0].text).toContain("Suggestion");
+  });
+
+  it("strategy=direct 전달 → uploadFile에 그대로 전달", async () => {
+    mockedUpload.mockResolvedValueOnce({
+      cdnUrl: "https://cdn.xbrush.ai/direct/a.png",
+      strategy: "direct",
+    });
+    await handlers.get("xbrush_file_upload")!({
+      file_path: "/tmp/a.png",
+      strategy: "direct",
+    });
+    const callArgs = mockedUpload.mock.calls.at(-1)!;
+    expect(callArgs[0]).toBe("/tmp/a.png");
+    expect(callArgs[1]).toBe("direct");
+  });
+
+  it("strategy 미지정 → 'auto' 기본", async () => {
+    mockedUpload.mockResolvedValueOnce({
+      cdnUrl: "https://cdn.xbrush.ai/auto/b.png",
+      strategy: "direct",
+    });
+    await handlers.get("xbrush_file_upload")!({ file_path: "/tmp/b.png" });
+    const callArgs = mockedUpload.mock.calls.at(-1)!;
+    expect(callArgs[1]).toBe("auto");
   });
 });

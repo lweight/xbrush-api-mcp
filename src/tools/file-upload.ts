@@ -20,6 +20,10 @@ export function registerFileUploadTools(server: McpServer): void {
         "",
         "Args:",
         "  file_path (string, required): Absolute path to the local file.",
+        "  strategy (string, optional): 'auto' (default), 'direct', or 'presign'.",
+        "    - auto: small files (< 10MB) go via direct upload, larger via presigned S3.",
+        "    - direct: POST /v1/files/upload (multipart).",
+        "    - presign: presigned URL + S3 upload (handles large files).",
       ].join("\n"),
       inputSchema: FileUploadSchema,
       annotations: {
@@ -31,12 +35,16 @@ export function registerFileUploadTools(server: McpServer): void {
     },
     async (args) => {
       try {
-        const { cdnUrl } = await uploadFile(args.file_path);
+        const { cdnUrl, strategy } = await uploadFile(
+          args.file_path,
+          args.strategy ?? "auto"
+        );
 
         const lines = [
           "File uploaded successfully.",
           "",
           `- **CDN URL**: ${cdnUrl}`,
+          `- **Strategy**: ${strategy}`,
           "",
           "Use this URL as `image_url` or `video_url` in other XBrush tools.",
         ];

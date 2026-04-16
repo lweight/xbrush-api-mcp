@@ -7,16 +7,17 @@ import {
   VideoGenerateSchema,
   VideoUpscaleSchema,
 } from "../schemas/video.js";
-import {
-  makeApiRequest,
-  buildToolResult,
-  handleToolError,
-} from "../services/xbrush-client.js";
-import { TIMEOUT_ASYNC_POST, TIMEOUT_VIDEO_SYNC } from "../constants.js";
-import type { XBrushSyncResponse, XBrushAsyncResponse } from "../types.js";
+import { submitSyncOrAsync } from "../services/dispatch.js";
+import { SYNC_TIMEOUTS } from "../constants.js";
+import type { XBrushSyncResponse } from "../types.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
+/**
+ * Video sync formatter: lists `videoUrl` first, then thumbnails (`imageUrls`).
+ * Kept distinct from the generic formatter because thumbnail rendering is
+ * domain-specific.
+ */
 function formatVideoSyncResult(r: XBrushSyncResponse, label: string): string {
   const lines: string[] = [];
   lines.push(`${label} completed.`);
@@ -33,20 +34,6 @@ function formatVideoSyncResult(r: XBrushSyncResponse, label: string): string {
       lines.push(`  ${i + 1}. ${url}`);
     });
   }
-
-  return lines.join("\n");
-}
-
-function formatAsyncResult(r: XBrushAsyncResponse, label: string): string {
-  const lines: string[] = [];
-  lines.push(`${label} submitted (async).`);
-  lines.push("");
-  lines.push(`- **Request ID**: \`${r.requestId}\``);
-  lines.push(`- **Status**: ${r.status}`);
-  lines.push(`- **Credits charged**: ${r.creditCharged}`);
-  lines.push(`- **Estimated time**: ~${r.estimatedTimeout}s`);
-  lines.push("");
-  lines.push(`Use \`xbrush_get_request\` with request_id \`${r.requestId}\` to check the result.`);
 
   return lines.join("\n");
 }
@@ -82,38 +69,24 @@ export function registerVideoTools(server: McpServer): void {
       },
     },
     async (args) => {
-      try {
-        const body: Record<string, unknown> = {
-          model: args.model,
-          imageUrl: args.image_url,
-        };
-        if (args.prompt !== undefined) body.prompt = args.prompt;
-        if (args.end_image_url !== undefined) body.endImageUrl = args.end_image_url;
-        if (args.duration !== undefined) body.duration = args.duration;
-        if (args.prompt_relevance !== undefined) body.promptRelevance = args.prompt_relevance;
+      const body: Record<string, unknown> = {
+        model: args.model,
+        imageUrl: args.image_url,
+      };
+      if (args.prompt !== undefined) body.prompt = args.prompt;
+      if (args.end_image_url !== undefined) body.endImageUrl = args.end_image_url;
+      if (args.duration !== undefined) body.duration = args.duration;
+      if (args.prompt_relevance !== undefined) body.promptRelevance = args.prompt_relevance;
 
-        const useSync = args.sync === true;
-
-        if (useSync) {
-          const response = await makeApiRequest<XBrushSyncResponse>({
-            method: "POST",
-            url: "/v1/video/generate/sync",
-            data: body,
-            timeout: TIMEOUT_VIDEO_SYNC,
-          });
-          return buildToolResult(formatVideoSyncResult(response, "Video generation"));
-        } else {
-          const response = await makeApiRequest<XBrushAsyncResponse>({
-            method: "POST",
-            url: "/v1/video/generate",
-            data: body,
-            timeout: TIMEOUT_ASYNC_POST,
-          });
-          return buildToolResult(formatAsyncResult(response, "Video generation"));
-        }
-      } catch (error) {
-        return handleToolError(error);
-      }
+      return submitSyncOrAsync({
+        useSync: args.sync === true,
+        syncUrl: "/v1/video/generate/sync",
+        asyncUrl: "/v1/video/generate",
+        syncTimeout: SYNC_TIMEOUTS.video,
+        body,
+        label: "Video generation",
+        formatSync: formatVideoSyncResult,
+      });
     }
   );
 
@@ -129,6 +102,8 @@ export function registerVideoTools(server: McpServer): void {
         "",
         "Args:",
         "  video_url (string, required): URL of the video to upscale.",
+        "  scale (int, required): Upscale multiplier (2 or 4).",
+        "  model (string, optional): Model ID (e.g. RealESRGAN, seedvr).",
         "  sync (bool, optional): Wait for result. Default: false.",
       ].join("\n"),
       inputSchema: VideoUpscaleSchema,
@@ -140,33 +115,21 @@ export function registerVideoTools(server: McpServer): void {
       },
     },
     async (args) => {
-      try {
-        const body: Record<string, unknown> = {
-          videoUrl: args.video_url,
-        };
+      const body: Record<string, unknown> = {
+        videoUrl: args.video_url,
+        scale: args.scale,
+      };
+      if (args.model !== undefined) body.model = args.model;
 
-        const useSync = args.sync === true;
-
-        if (useSync) {
-          const response = await makeApiRequest<XBrushSyncResponse>({
-            method: "POST",
-            url: "/v1/video/upscale/sync",
-            data: body,
-            timeout: TIMEOUT_VIDEO_SYNC,
-          });
-          return buildToolResult(formatVideoSyncResult(response, "Video upscale"));
-        } else {
-          const response = await makeApiRequest<XBrushAsyncResponse>({
-            method: "POST",
-            url: "/v1/video/upscale",
-            data: body,
-            timeout: TIMEOUT_ASYNC_POST,
-          });
-          return buildToolResult(formatAsyncResult(response, "Video upscale"));
-        }
-      } catch (error) {
-        return handleToolError(error);
-      }
+      return submitSyncOrAsync({
+        useSync: args.sync === true,
+        syncUrl: "/v1/video/upscale/sync",
+        asyncUrl: "/v1/video/upscale",
+        syncTimeout: SYNC_TIMEOUTS.video,
+        body,
+        label: "Video upscale",
+        formatSync: formatVideoSyncResult,
+      });
     }
   );
 }

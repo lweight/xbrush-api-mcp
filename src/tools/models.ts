@@ -59,10 +59,11 @@ export function registerModelTools(server: McpServer): void {
       title: "List Models",
       description: [
         "List available XBrush AI models with pricing info.",
-        "Models include image generation/editing, video generation, and audio (TTS).",
+        "Models span image generation/editing/upscale/remove-bg/outpaint, video (i2v/upscale/lipsync/extend/retake), and audio (TTS).",
+        "Music, sound-effect, and watermark endpoints have no dedicated model list — call them directly.",
         "",
         "Args:",
-        "  category (string, optional): Filter by 'image', 'video', or 'audio'.",
+        "  category (string, optional): 'image', 'video', or 'audio'.",
       ].join("\n"),
       inputSchema: ListModelsSchema,
       annotations: {

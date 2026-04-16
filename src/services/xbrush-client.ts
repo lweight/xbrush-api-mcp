@@ -8,7 +8,12 @@ import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { API_BASE_URL, CHARACTER_LIMIT, TIMEOUT_GET } from "../constants.js";
-import type { XBrushErrorResponse } from "../types.js";
+import type {
+  XBrushAsyncResponse,
+  XBrushErrorResponse,
+  XBrushOutput,
+  XBrushSyncResponse,
+} from "../types.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 // ── API Client Singleton ──────────────────────────────────────────────
@@ -59,7 +64,7 @@ function loadKeyFromEnvFile(keyName: string): string | undefined {
   return undefined;
 }
 
-function getApiKey(): string {
+export function getApiKey(): string {
   let key = process.env.XBRUSH_API_KEY;
   if (!key) {
     key = loadKeyFromEnvFile("XBRUSH_API_KEY");
@@ -121,9 +126,9 @@ function getSuggestion(code: string, status: number): string {
   switch (code) {
     case "MISSING_API_KEY":
     case "INVALID_API_KEY":
-      return "Check XBRUSH_API_KEY. Get your key at xbrush.ai > Dashboard > API Keys.";
+      return "Check XBRUSH_API_KEY. Get your key at https://xbrush.run/api-keys.";
     case "INSUFFICIENT_CREDIT":
-      return "Insufficient credits. Top up at xbrush.ai > Dashboard > Billing.";
+      return "Insufficient credits. Top up at https://xbrush.run.";
     case "INVALID_MODEL":
       return "Model not recognized. Use xbrush_list_models to see available models.";
     case "VALIDATION_ERROR":
@@ -211,4 +216,64 @@ function truncateText(text: string): string {
     truncated +
     `\n\n--- Response truncated (${text.length} chars, limit: ${CHARACTER_LIMIT}). ---`
   );
+}
+
+// ── Default Formatters ────────────────────────────────────────────────
+
+const OUTPUT_RENDERERS: Array<{ test: (o: XBrushOutput) => boolean; render: (o: XBrushOutput) => string[] }> = [
+  {
+    test: (o) => Array.isArray(o.imageUrls) && o.imageUrls.length > 0,
+    render: (o) => {
+      const urls = o.imageUrls as string[];
+      const lines = [`- **Images** (${urls.length}):`];
+      urls.forEach((url, i) => lines.push(`  ${i + 1}. ${url}`));
+      return lines;
+    },
+  },
+  {
+    test: (o) => typeof o.videoUrl === "string" && o.videoUrl.length > 0,
+    render: (o) => [`- **Video**: ${o.videoUrl}`],
+  },
+  {
+    test: (o) => typeof o.audioUrl === "string" && (o.audioUrl as string).length > 0,
+    render: (o) => [`- **Audio**: ${o.audioUrl}`],
+  },
+  {
+    test: (o) => typeof o.url === "string" && (o.url as string).length > 0,
+    render: (o) => [`- **URL**: ${o.url}`],
+  },
+];
+
+export function formatSyncResult(r: XBrushSyncResponse, label: string): string {
+  const lines: string[] = [];
+  lines.push(`${label} completed.`);
+  lines.push("");
+  lines.push(`- **Request ID**: ${r.requestId}`);
+  lines.push(`- **Credits charged**: ${r.creditCharged}`);
+
+  // First-match only: avoid rendering multiple output fields if the server
+  // returns overlapping keys (e.g. videoUrl + imageUrls thumbnails together).
+  // Domain-specific formatters (video, lip-sync) handle their own composition.
+  const renderer = OUTPUT_RENDERERS.find((r2) => r2.test(r.output));
+  if (renderer) {
+    lines.push(...renderer.render(r.output));
+  }
+
+  return lines.join("\n");
+}
+
+export function formatAsyncResult(r: XBrushAsyncResponse, label: string): string {
+  const lines: string[] = [];
+  lines.push(`${label} submitted (async).`);
+  lines.push("");
+  lines.push(`- **Request ID**: \`${r.requestId}\``);
+  lines.push(`- **Status**: ${r.status}`);
+  lines.push(`- **Credits charged**: ${r.creditCharged}`);
+  lines.push(`- **Estimated time**: ~${r.estimatedTimeout}s`);
+  lines.push("");
+  lines.push(
+    `Use \`xbrush_get_request\` with request_id \`${r.requestId}\` to check the result.`
+  );
+
+  return lines.join("\n");
 }

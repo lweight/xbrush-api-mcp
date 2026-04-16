@@ -105,6 +105,18 @@ describe("ImageEditSchema", () => {
     expect(result.sync).toBe(true);
   });
 
+  it("mode='inpaint' 유효", () => {
+    expect(ImageEditSchema.parse({ ...base, mode: "inpaint" }).mode).toBe("inpaint");
+  });
+
+  it("mode='outpaint' 유효", () => {
+    expect(ImageEditSchema.parse({ ...base, mode: "outpaint" }).mode).toBe("outpaint");
+  });
+
+  it("mode 잘못된 값 거부", () => {
+    expect(() => ImageEditSchema.parse({ ...base, mode: "extend" })).toThrow();
+  });
+
   it("미정의 필드 거부", () => {
     expect(() =>
       ImageEditSchema.parse({ ...base, style: "anime" })

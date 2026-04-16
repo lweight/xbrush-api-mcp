@@ -16,4 +16,28 @@ describe("FileUploadSchema", () => {
       FileUploadSchema.parse({ file_path: "/tmp/x.png", overwrite: true })
     ).toThrow();
   });
+
+  it("strategy='auto' 유효", () => {
+    expect(
+      FileUploadSchema.parse({ file_path: "/x.png", strategy: "auto" }).strategy
+    ).toBe("auto");
+  });
+
+  it("strategy='direct' 유효", () => {
+    expect(
+      FileUploadSchema.parse({ file_path: "/x.png", strategy: "direct" }).strategy
+    ).toBe("direct");
+  });
+
+  it("strategy='presign' 유효", () => {
+    expect(
+      FileUploadSchema.parse({ file_path: "/x.png", strategy: "presign" }).strategy
+    ).toBe("presign");
+  });
+
+  it("strategy 잘못된 값 거부", () => {
+    expect(() =>
+      FileUploadSchema.parse({ file_path: "/x.png", strategy: "s3" })
+    ).toThrow();
+  });
 });

@@ -9,46 +9,8 @@ import {
   ImageUpscaleSchema,
   ImageRemoveBgSchema,
 } from "../schemas/image.js";
-import {
-  makeApiRequest,
-  buildToolResult,
-  handleToolError,
-} from "../services/xbrush-client.js";
-import { TIMEOUT_SYNC, TIMEOUT_ASYNC_POST } from "../constants.js";
-import type { XBrushSyncResponse, XBrushAsyncResponse } from "../types.js";
-
-// ── Helpers ───────────────────────────────────────────────────────────
-
-function formatSyncResult(r: XBrushSyncResponse, label: string): string {
-  const lines: string[] = [];
-  lines.push(`${label} completed.`);
-  lines.push("");
-  lines.push(`- **Request ID**: ${r.requestId}`);
-  lines.push(`- **Credits charged**: ${r.creditCharged}`);
-
-  if (r.output.imageUrls?.length) {
-    lines.push(`- **Images** (${r.output.imageUrls.length}):`);
-    r.output.imageUrls.forEach((url, i) => {
-      lines.push(`  ${i + 1}. ${url}`);
-    });
-  }
-
-  return lines.join("\n");
-}
-
-function formatAsyncResult(r: XBrushAsyncResponse, label: string): string {
-  const lines: string[] = [];
-  lines.push(`${label} submitted (async).`);
-  lines.push("");
-  lines.push(`- **Request ID**: \`${r.requestId}\``);
-  lines.push(`- **Status**: ${r.status}`);
-  lines.push(`- **Credits charged**: ${r.creditCharged}`);
-  lines.push(`- **Estimated time**: ~${r.estimatedTimeout}s`);
-  lines.push("");
-  lines.push(`Use \`xbrush_get_request\` with request_id \`${r.requestId}\` to check the result.`);
-
-  return lines.join("\n");
-}
+import { submitSyncOrAsync } from "../services/dispatch.js";
+import { SYNC_TIMEOUTS } from "../constants.js";
 
 // ── Tool Registration ─────────────────────────────────────────────────
 
@@ -82,39 +44,24 @@ export function registerImageTools(server: McpServer): void {
       },
     },
     async (args) => {
-      try {
-        const body: Record<string, unknown> = {
-          model: args.model,
-          prompt: args.prompt,
-        };
-        if (args.n !== undefined) body.n = args.n;
-        if (args.negative_prompt !== undefined) body.negativePrompt = args.negative_prompt;
-        if (args.width !== undefined) body.width = args.width;
-        if (args.height !== undefined) body.height = args.height;
-        if (args.seed !== undefined) body.seed = args.seed;
+      const body: Record<string, unknown> = {
+        model: args.model,
+        prompt: args.prompt,
+      };
+      if (args.n !== undefined) body.n = args.n;
+      if (args.negative_prompt !== undefined) body.negativePrompt = args.negative_prompt;
+      if (args.width !== undefined) body.width = args.width;
+      if (args.height !== undefined) body.height = args.height;
+      if (args.seed !== undefined) body.seed = args.seed;
 
-        const useSync = args.sync !== false;
-
-        if (useSync) {
-          const response = await makeApiRequest<XBrushSyncResponse>({
-            method: "POST",
-            url: "/v1/image/generate/sync",
-            data: body,
-            timeout: TIMEOUT_SYNC,
-          });
-          return buildToolResult(formatSyncResult(response, "Image generation"));
-        } else {
-          const response = await makeApiRequest<XBrushAsyncResponse>({
-            method: "POST",
-            url: "/v1/image/generate",
-            data: body,
-            timeout: TIMEOUT_ASYNC_POST,
-          });
-          return buildToolResult(formatAsyncResult(response, "Image generation"));
-        }
-      } catch (error) {
-        return handleToolError(error);
-      }
+      return submitSyncOrAsync({
+        useSync: args.sync !== false,
+        syncUrl: "/v1/image/generate/sync",
+        asyncUrl: "/v1/image/generate",
+        syncTimeout: SYNC_TIMEOUTS.image,
+        body,
+        label: "Image generation",
+      });
     }
   );
 
@@ -134,8 +81,9 @@ export function registerImageTools(server: McpServer): void {
         "  image_url (string, required): URL of the source image.",
         "  n (int, optional): Number of results (1-8). Default: 1.",
         "  mask_url (string, optional): Mask image URL (white=edit, black=preserve).",
-        "  width (int, optional): Output width (256-4096).",
-        "  height (int, optional): Output height (256-4096).",
+        "  mode (string, optional): 'inpaint' (default) edits in place; 'outpaint' extends the canvas.",
+        "  width (int, optional): Output width (256-4096). For outpaint, target canvas width.",
+        "  height (int, optional): Output height (256-4096). For outpaint, target canvas height.",
         "  seed (int, optional): Random seed.",
         "  sync (bool, optional): Default: false. Set true for sync.",
       ].join("\n"),
@@ -148,40 +96,26 @@ export function registerImageTools(server: McpServer): void {
       },
     },
     async (args) => {
-      try {
-        const body: Record<string, unknown> = {
-          model: args.model,
-          prompt: args.prompt,
-          imageUrl: args.image_url,
-        };
-        if (args.n !== undefined) body.n = args.n;
-        if (args.mask_url !== undefined) body.maskUrl = args.mask_url;
-        if (args.width !== undefined) body.width = args.width;
-        if (args.height !== undefined) body.height = args.height;
-        if (args.seed !== undefined) body.seed = args.seed;
+      const body: Record<string, unknown> = {
+        model: args.model,
+        prompt: args.prompt,
+        imageUrl: args.image_url,
+      };
+      if (args.n !== undefined) body.n = args.n;
+      if (args.mask_url !== undefined) body.maskUrl = args.mask_url;
+      if (args.mode !== undefined) body.mode = args.mode;
+      if (args.width !== undefined) body.width = args.width;
+      if (args.height !== undefined) body.height = args.height;
+      if (args.seed !== undefined) body.seed = args.seed;
 
-        const useSync = args.sync === true;
-
-        if (useSync) {
-          const response = await makeApiRequest<XBrushSyncResponse>({
-            method: "POST",
-            url: "/v1/image/edit/sync",
-            data: body,
-            timeout: TIMEOUT_SYNC,
-          });
-          return buildToolResult(formatSyncResult(response, "Image edit"));
-        } else {
-          const response = await makeApiRequest<XBrushAsyncResponse>({
-            method: "POST",
-            url: "/v1/image/edit",
-            data: body,
-            timeout: TIMEOUT_ASYNC_POST,
-          });
-          return buildToolResult(formatAsyncResult(response, "Image edit"));
-        }
-      } catch (error) {
-        return handleToolError(error);
-      }
+      return submitSyncOrAsync({
+        useSync: args.sync === true,
+        syncUrl: "/v1/image/edit/sync",
+        asyncUrl: "/v1/image/edit",
+        syncTimeout: SYNC_TIMEOUTS.image,
+        body,
+        label: "Image edit",
+      });
     }
   );
 
@@ -209,34 +143,19 @@ export function registerImageTools(server: McpServer): void {
       },
     },
     async (args) => {
-      try {
-        const body: Record<string, unknown> = {
-          imageUrl: args.image_url,
-        };
-        if (args.upscale_factor !== undefined) body.upscaleFactor = args.upscale_factor;
+      const body: Record<string, unknown> = {
+        imageUrl: args.image_url,
+      };
+      if (args.upscale_factor !== undefined) body.upscaleFactor = args.upscale_factor;
 
-        const useSync = args.sync === true;
-
-        if (useSync) {
-          const response = await makeApiRequest<XBrushSyncResponse>({
-            method: "POST",
-            url: "/v1/image/upscale/sync",
-            data: body,
-            timeout: TIMEOUT_SYNC,
-          });
-          return buildToolResult(formatSyncResult(response, "Image upscale"));
-        } else {
-          const response = await makeApiRequest<XBrushAsyncResponse>({
-            method: "POST",
-            url: "/v1/image/upscale",
-            data: body,
-            timeout: TIMEOUT_ASYNC_POST,
-          });
-          return buildToolResult(formatAsyncResult(response, "Image upscale"));
-        }
-      } catch (error) {
-        return handleToolError(error);
-      }
+      return submitSyncOrAsync({
+        useSync: args.sync === true,
+        syncUrl: "/v1/image/upscale/sync",
+        asyncUrl: "/v1/image/upscale",
+        syncTimeout: SYNC_TIMEOUTS.image,
+        body,
+        label: "Image upscale",
+      });
     }
   );
 
@@ -261,19 +180,14 @@ export function registerImageTools(server: McpServer): void {
         openWorldHint: true,
       },
     },
-    async (args) => {
-      try {
-        const response = await makeApiRequest<XBrushSyncResponse>({
-          method: "POST",
-          url: "/v1/image/remove-background/sync",
-          data: { imageUrl: args.image_url },
-          timeout: TIMEOUT_SYNC,
-        });
-
-        return buildToolResult(formatSyncResult(response, "Background removal"));
-      } catch (error) {
-        return handleToolError(error);
-      }
-    }
+    async (args) =>
+      submitSyncOrAsync({
+        useSync: true,
+        syncUrl: "/v1/image/remove-background/sync",
+        asyncUrl: "/v1/image/remove-background",
+        syncTimeout: SYNC_TIMEOUTS.image,
+        body: { imageUrl: args.image_url },
+        label: "Background removal",
+      })
   );
 }

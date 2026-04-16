@@ -1,5 +1,31 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`도구 스키마 스냅샷 > xbrush_file_upload 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "file_path": {
+      "description": "Absolute path to the local file to upload.",
+      "type": "string",
+    },
+    "strategy": {
+      "description": "Upload strategy: 'auto' (default) picks by file size; 'direct' uses /v1/files/upload; 'presign' uses /v1/files/presign + S3.",
+      "enum": [
+        "auto",
+        "direct",
+        "presign",
+      ],
+      "type": "string",
+    },
+  },
+  "required": [
+    "file_path",
+  ],
+  "type": "object",
+}
+`;
+
 exports[`도구 스키마 스냅샷 > xbrush_get_request 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
@@ -24,7 +50,7 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
   "additionalProperties": false,
   "properties": {
     "height": {
-      "description": "Output height in pixels (256-4096).",
+      "description": "Output height in pixels (256-4096). For outpaint, the target canvas height.",
       "maximum": 4096,
       "minimum": 256,
       "type": "integer",
@@ -39,6 +65,14 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "format": "uri",
       "type": "string",
     },
+    "mode": {
+      "description": "'inpaint' (default) edits the image in place; 'outpaint' extends the canvas using width/height.",
+      "enum": [
+        "inpaint",
+        "outpaint",
+      ],
+      "type": "string",
+    },
     "model": {
       "description": "Image editing model (e.g. qwen-image-edit-re, gemini-2.5-flash-edit).",
       "type": "string",
@@ -51,6 +85,7 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
     },
     "prompt": {
       "description": "Text instruction describing the desired edits.",
+      "minLength": 1,
       "type": "string",
     },
     "seed": {
@@ -62,7 +97,7 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "type": "boolean",
     },
     "width": {
-      "description": "Output width in pixels (256-4096).",
+      "description": "Output width in pixels (256-4096). For outpaint, the target canvas width.",
       "maximum": 4096,
       "minimum": 256,
       "type": "integer",
@@ -104,6 +139,7 @@ exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
     },
     "prompt": {
       "description": "Text description of the image to generate.",
+      "minLength": 1,
       "type": "string",
     },
     "seed": {
@@ -135,7 +171,7 @@ exports[`도구 스키마 스냅샷 > xbrush_list_models 1`] = `
   "additionalProperties": false,
   "properties": {
     "category": {
-      "description": "Filter by category. Omit to list all models.",
+      "description": "Filter by top-level category (image, video, audio). Omit to list all.",
       "enum": [
         "image",
         "video",
@@ -144,6 +180,125 @@ exports[`도구 스키마 스냅샷 > xbrush_list_models 1`] = `
       "type": "string",
     },
   },
+  "type": "object",
+}
+`;
+
+exports[`도구 스키마 스냅샷 > xbrush_music_generate 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "duration": {
+      "description": "Duration in seconds (1-120). Conservative upper bound; may be lifted by server.",
+      "maximum": 120,
+      "minimum": 1,
+      "type": "integer",
+    },
+    "model": {
+      "description": "Music model ID (e.g. lyria2). Optional — server picks a default.",
+      "type": "string",
+    },
+    "negative_prompt": {
+      "description": "Styles/elements to exclude from the generated music.",
+      "type": "string",
+    },
+    "prompt": {
+      "description": "Text description of the music to generate.",
+      "minLength": 1,
+      "type": "string",
+    },
+    "seed": {
+      "description": "Random seed for reproducibility.",
+      "type": "integer",
+    },
+    "sync": {
+      "description": "If true, wait for result (can take minutes). Default: false (async).",
+      "type": "boolean",
+    },
+  },
+  "required": [
+    "prompt",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`도구 스키마 스냅샷 > xbrush_tts_generate 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "language": {
+      "description": "Language/locale code (e.g. 'ko', 'en', 'ko-KR').",
+      "type": "string",
+    },
+    "model": {
+      "description": "TTS model ID (e.g. speech-2.6-hd, eleven_v3). Optional — server picks a default. Use xbrush_list_models with category='audio'.",
+      "type": "string",
+    },
+    "speed": {
+      "description": "Speech rate multiplier (0.5-2.0). Default: 1.0.",
+      "maximum": 2,
+      "minimum": 0.5,
+      "type": "number",
+    },
+    "sync": {
+      "description": "If true, wait for result (sync). Default: false (async, poll with xbrush_get_request).",
+      "type": "boolean",
+    },
+    "text": {
+      "description": "Text to synthesize (non-blank).",
+      "minLength": 1,
+      "type": "string",
+    },
+    "voice_id": {
+      "description": "Voice identifier. See the model's supported voices.",
+      "type": "string",
+    },
+  },
+  "required": [
+    "text",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`도구 스키마 스냅샷 > xbrush_video_lip_sync 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "audio_url": {
+      "description": "URL of the audio to lip-sync onto the video.",
+      "format": "uri",
+      "type": "string",
+    },
+    "model": {
+      "description": "Lip-sync model ID (e.g. pixverse). Defaults to the server's default model.",
+      "type": "string",
+    },
+    "sync": {
+      "description": "If true, wait for result (can take minutes). Default: false (async, poll with xbrush_get_request).",
+      "type": "boolean",
+    },
+    "video_url": {
+      "description": "URL of the source video (face must be visible).",
+      "format": "uri",
+      "type": "string",
+    },
+  },
+  "required": [
+    "video_url",
+    "audio_url",
+  ],
+  "type": "object",
+}
+`;
+
+exports[`도구 스키마 스냅샷 > xbrush_watermark_add 1`] = `
+{
+  "properties": {},
   "type": "object",
 }
 `;

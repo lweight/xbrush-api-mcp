@@ -21,6 +21,10 @@ import { registerRequestTools } from "./tools/requests.js";
 import { registerModelTools } from "./tools/models.js";
 import { registerFileUploadTools } from "./tools/file-upload.js";
 import { registerVideoTools } from "./tools/video.js";
+import { registerAudioTools } from "./tools/audio.js";
+import { registerLipSyncTools } from "./tools/lip-sync.js";
+import { registerWatermarkTools } from "./tools/watermark.js";
+import { applyDisableFilter, parseDisabledTools } from "./tool-filter.js";
 
 // ── Read version from package.json ────────────────────────────────────
 
@@ -46,11 +50,19 @@ const server = new McpServer(
 
 // ── Register All Tools ────────────────────────────────────────────────
 
+const disabled = parseDisabledTools(process.env.XBRUSH_DISABLED_TOOLS);
+const reportUnmatched = applyDisableFilter(server, disabled);
+
 registerImageTools(server); // 4 tools: generate, edit, upscale, remove_bg
 registerVideoTools(server); // 2 tools: video_generate, video_upscale
+registerAudioTools(server); // 3 tools: tts_generate, music_generate, sound_effect_generate
+registerLipSyncTools(server); // 1 tool:  video_lip_sync
+registerWatermarkTools(server); // 1 tool:  watermark_add
 registerRequestTools(server); // 3 tools: get_request, list_requests, check_health
 registerModelTools(server); // 1 tool:  list_models
 registerFileUploadTools(server); // 1 tool:  file_upload
+
+reportUnmatched();
 
 // ── Start Server ──────────────────────────────────────────────────────
 

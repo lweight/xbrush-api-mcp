@@ -142,6 +142,7 @@ describe("xbrush_video_upscale", () => {
     mockedApi.mockResolvedValueOnce(mockVideoAsync);
     const result = await handlers.get("xbrush_video_upscale")!({
       video_url: "https://assets.xbrush.ai/video.mp4",
+      scale: 2,
     });
     expect(result.isError).toBeFalsy();
     expect(result.content[0].text).toContain("async");
@@ -152,6 +153,7 @@ describe("xbrush_video_upscale", () => {
     mockedApi.mockResolvedValueOnce(mockVideoAsync);
     await handlers.get("xbrush_video_upscale")!({
       video_url: "https://assets.xbrush.ai/video.mp4",
+      scale: 2,
     });
     const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
     expect(callArgs.url).toBe("/v1/video/upscale");
@@ -161,6 +163,7 @@ describe("xbrush_video_upscale", () => {
     mockedApi.mockResolvedValueOnce(mockVideoSync);
     await handlers.get("xbrush_video_upscale")!({
       video_url: "https://assets.xbrush.ai/video.mp4",
+      scale: 2,
       sync: true,
     });
     const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
@@ -171,6 +174,7 @@ describe("xbrush_video_upscale", () => {
     mockedApi.mockResolvedValueOnce(mockVideoSync);
     const result = await handlers.get("xbrush_video_upscale")!({
       video_url: "https://assets.xbrush.ai/video.mp4",
+      scale: 2,
       sync: true,
     });
     expect(result.content[0].text).toContain("completed");
@@ -181,6 +185,7 @@ describe("xbrush_video_upscale", () => {
     mockedApi.mockResolvedValueOnce(mockVideoAsync);
     await handlers.get("xbrush_video_upscale")!({
       video_url: "https://a.com/video.mp4",
+      scale: 2,
     });
     const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
     expect(callArgs.data.videoUrl).toBe("https://a.com/video.mp4");
@@ -190,6 +195,7 @@ describe("xbrush_video_upscale", () => {
     mockedApi.mockRejectedValueOnce(new Error("upscale failed"));
     const result = await handlers.get("xbrush_video_upscale")!({
       video_url: "https://a.com/video.mp4",
+      scale: 2,
     });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("upscale failed");

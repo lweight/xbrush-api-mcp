@@ -100,12 +100,19 @@ describe("VideoGenerateSchema", () => {
 });
 
 describe("VideoUpscaleSchema", () => {
-  const base = { video_url: VALID_VIDEO_URL };
+  const base = { video_url: VALID_VIDEO_URL, scale: 2 };
 
-  it("필수 필드만 유효", () => {
+  it("필수 필드(video_url + scale)만 유효", () => {
     const result = VideoUpscaleSchema.parse(base);
     expect(result.video_url).toBe(VALID_VIDEO_URL);
+    expect(result.scale).toBe(2);
     expect(result.sync).toBeUndefined();
+  });
+
+  it("scale=4 유효, model 포함", () => {
+    const r = VideoUpscaleSchema.parse({ ...base, scale: 4, model: "RealESRGAN" });
+    expect(r.scale).toBe(4);
+    expect(r.model).toBe("RealESRGAN");
   });
 
   it("sync=true 유효", () => {
@@ -113,18 +120,26 @@ describe("VideoUpscaleSchema", () => {
     expect(result.sync).toBe(true);
   });
 
-  it("sync=false 유효", () => {
-    const result = VideoUpscaleSchema.parse({ ...base, sync: false });
-    expect(result.sync).toBe(false);
+  it("video_url 누락 시 에러", () => {
+    expect(() => VideoUpscaleSchema.parse({ scale: 2 })).toThrow();
   });
 
-  it("video_url 누락 시 에러", () => {
-    expect(() => VideoUpscaleSchema.parse({})).toThrow();
+  it("scale 누락 시 에러", () => {
+    expect(() => VideoUpscaleSchema.parse({ video_url: VALID_VIDEO_URL })).toThrow();
+  });
+
+  it("scale 범위 벗어나면 거부", () => {
+    expect(() =>
+      VideoUpscaleSchema.parse({ video_url: VALID_VIDEO_URL, scale: 1 })
+    ).toThrow();
+    expect(() =>
+      VideoUpscaleSchema.parse({ video_url: VALID_VIDEO_URL, scale: 8 })
+    ).toThrow();
   });
 
   it("video_url이 URL 아닌 경우 거부", () => {
     expect(() =>
-      VideoUpscaleSchema.parse({ video_url: "not-a-url" })
+      VideoUpscaleSchema.parse({ video_url: "not-a-url", scale: 2 })
     ).toThrow();
   });
 

@@ -24,6 +24,9 @@ import { registerRequestTools } from "../../src/tools/requests.js";
 import { registerModelTools } from "../../src/tools/models.js";
 import { registerFileUploadTools } from "../../src/tools/file-upload.js";
 import { registerVideoTools } from "../../src/tools/video.js";
+import { registerAudioTools } from "../../src/tools/audio.js";
+import { registerLipSyncTools } from "../../src/tools/lip-sync.js";
+import { registerWatermarkTools } from "../../src/tools/watermark.js";
 import type { XBrushSyncResponse } from "../../src/types.js";
 
 const mockedApi = vi.mocked(makeApiRequest);
@@ -48,6 +51,9 @@ beforeAll(async () => {
 
   registerImageTools(mcpServer);
   registerVideoTools(mcpServer);
+  registerAudioTools(mcpServer);
+  registerLipSyncTools(mcpServer);
+  registerWatermarkTools(mcpServer);
   registerRequestTools(mcpServer);
   registerModelTools(mcpServer);
   registerFileUploadTools(mcpServer);
@@ -70,8 +76,8 @@ afterAll(async () => {
 // ── 도구 등록 검증 ───────────────────────────────────────────────────
 
 describe("도구 등록", () => {
-  it("도구 11개 등록", () => {
-    expect(tools).toHaveLength(11);
+  it("도구 16개 등록", () => {
+    expect(tools).toHaveLength(16);
   });
 
   it("도구 이름 목록 일치", () => {
@@ -86,8 +92,13 @@ describe("도구 등록", () => {
       "xbrush_image_upscale",
       "xbrush_list_models",
       "xbrush_list_requests",
+      "xbrush_music_generate",
+      "xbrush_sound_effect_generate",
+      "xbrush_tts_generate",
       "xbrush_video_generate",
+      "xbrush_video_lip_sync",
       "xbrush_video_upscale",
+      "xbrush_watermark_add",
     ]);
   });
 
@@ -96,6 +107,22 @@ describe("도구 등록", () => {
       expect(tool.annotations).toBeDefined();
       expect(tool.annotations).toHaveProperty("readOnlyHint");
       expect(tool.annotations).toHaveProperty("destructiveHint");
+    }
+  });
+
+  it("신규 생성 도구는 idempotentHint: false (중복 과금 방지)", () => {
+    const generators = [
+      "xbrush_tts_generate",
+      "xbrush_music_generate",
+      "xbrush_sound_effect_generate",
+      "xbrush_video_lip_sync",
+      "xbrush_watermark_add",
+    ];
+    for (const name of generators) {
+      const tool = tools.find((t) => t.name === name)!;
+      expect(tool.annotations!.idempotentHint).toBe(false);
+      expect(tool.annotations!.destructiveHint).toBe(false);
+      expect(tool.annotations!.openWorldHint).toBe(true);
     }
   });
 });
@@ -120,6 +147,31 @@ describe("도구 스키마 스냅샷", () => {
 
   it("xbrush_get_request", () => {
     const tool = tools.find((t) => t.name === "xbrush_get_request")!;
+    expect(tool.inputSchema).toMatchSnapshot();
+  });
+
+  it("xbrush_tts_generate", () => {
+    const tool = tools.find((t) => t.name === "xbrush_tts_generate")!;
+    expect(tool.inputSchema).toMatchSnapshot();
+  });
+
+  it("xbrush_music_generate", () => {
+    const tool = tools.find((t) => t.name === "xbrush_music_generate")!;
+    expect(tool.inputSchema).toMatchSnapshot();
+  });
+
+  it("xbrush_video_lip_sync", () => {
+    const tool = tools.find((t) => t.name === "xbrush_video_lip_sync")!;
+    expect(tool.inputSchema).toMatchSnapshot();
+  });
+
+  it("xbrush_watermark_add", () => {
+    const tool = tools.find((t) => t.name === "xbrush_watermark_add")!;
+    expect(tool.inputSchema).toMatchSnapshot();
+  });
+
+  it("xbrush_file_upload", () => {
+    const tool = tools.find((t) => t.name === "xbrush_file_upload")!;
     expect(tool.inputSchema).toMatchSnapshot();
   });
 });

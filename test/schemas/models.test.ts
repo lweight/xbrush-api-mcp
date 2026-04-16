@@ -19,6 +19,12 @@ describe("ListModelsSchema", () => {
     expect(ListModelsSchema.parse({ category: "audio" }).category).toBe("audio");
   });
 
+  it("music, sound-effect, lip-sync 은 category가 아니므로 거부", () => {
+    expect(() => ListModelsSchema.parse({ category: "music" })).toThrow();
+    expect(() => ListModelsSchema.parse({ category: "sound-effect" })).toThrow();
+    expect(() => ListModelsSchema.parse({ category: "lip-sync" })).toThrow();
+  });
+
   it("잘못된 category 거부", () => {
     expect(() => ListModelsSchema.parse({ category: "text" })).toThrow();
   });

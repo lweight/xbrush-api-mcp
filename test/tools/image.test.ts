@@ -158,6 +158,33 @@ describe("xbrush_image_edit", () => {
     expect(callArgs.data.maskUrl).toBe("https://a.com/m.png");
   });
 
+  it("mode=outpaint → body.mode 포함", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    await handlers.get("xbrush_image_edit")!({
+      model: "m",
+      prompt: "extend the sky",
+      image_url: "https://a.com/i.png",
+      mode: "outpaint",
+      width: 2048,
+      height: 1024,
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.data.mode).toBe("outpaint");
+    expect(callArgs.data.width).toBe(2048);
+    expect(callArgs.data.height).toBe(1024);
+  });
+
+  it("mode 미지정 → body에 mode 없음", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    await handlers.get("xbrush_image_edit")!({
+      model: "m",
+      prompt: "p",
+      image_url: "https://a.com/i.png",
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect("mode" in callArgs.data).toBe(false);
+  });
+
   it("sync=true → sync 모드 + /v1/image/edit/sync 호출", async () => {
     mockedApi.mockResolvedValueOnce(mockSync);
     const result = await handlers.get("xbrush_image_edit")!({
