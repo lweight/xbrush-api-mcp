@@ -3,13 +3,12 @@ import { AxiosError } from "axios";
 import {
   buildToolResult,
   formatAsyncResult,
-  formatSyncResult,
   handleApiError,
   handleToolError,
   XBrushApiError,
 } from "../../src/services/xbrush-client.js";
 import { CHARACTER_LIMIT } from "../../src/constants.js";
-import type { XBrushSyncResponse, XBrushAsyncResponse } from "../../src/types.js";
+import type { XBrushAsyncResponse } from "../../src/types.js";
 
 // ── XBrushApiError ───────────────────────────────────────────────────
 
@@ -182,79 +181,7 @@ describe("handleToolError", () => {
   });
 });
 
-// ── formatSyncResult / formatAsyncResult ─────────────────────────────
-
-function makeSync(output: Record<string, unknown>): XBrushSyncResponse {
-  return {
-    requestId: "req" + "z".repeat(21),
-    status: "completed",
-    domain: "x",
-    action: "y",
-    creditCharged: 3,
-    output: output as any,
-    completedAt: "2026-04-16T00:00:00Z",
-    syncCompleted: true,
-  };
-}
-
-describe("formatSyncResult — first-match renderer", () => {
-  it("imageUrls 렌더링 (복수)", () => {
-    const text = formatSyncResult(
-      makeSync({ imageUrls: ["https://cdn/1.png", "https://cdn/2.png"] }),
-      "Image"
-    );
-    expect(text).toContain("Image completed.");
-    expect(text).toContain("Request ID");
-    expect(text).toContain("Credits charged");
-    expect(text).toContain(": 3");
-    expect(text).toContain("Images** (2)");
-    expect(text).toContain("https://cdn/1.png");
-    expect(text).toContain("https://cdn/2.png");
-  });
-
-  it("videoUrl 단독 렌더링", () => {
-    const text = formatSyncResult(makeSync({ videoUrl: "https://cdn/v.mp4" }), "Video");
-    expect(text).toContain("Video**: https://cdn/v.mp4");
-    expect(text).not.toContain("Images**");
-  });
-
-  it("audioUrl 단독 렌더링", () => {
-    const text = formatSyncResult(makeSync({ audioUrl: "https://cdn/a.mp3" }), "TTS");
-    expect(text).toContain("Audio**: https://cdn/a.mp3");
-  });
-
-  it("url fallback 렌더링", () => {
-    const text = formatSyncResult(makeSync({ url: "https://cdn/x.bin" }), "Generic");
-    expect(text).toContain("URL**: https://cdn/x.bin");
-  });
-
-  it("imageUrls + videoUrl 동시 존재 시 첫 매칭(imageUrls)만 — 중복 렌더 방지", () => {
-    const text = formatSyncResult(
-      makeSync({ imageUrls: ["https://cdn/i.png"], videoUrl: "https://cdn/v.mp4" }),
-      "Mixed"
-    );
-    expect(text).toContain("Images**");
-    expect(text).toContain("i.png");
-    expect(text).not.toContain("Video**: https://cdn/v.mp4");
-  });
-
-  it("imageUrls 빈 배열 → 비디오로 fallback", () => {
-    const text = formatSyncResult(
-      makeSync({ imageUrls: [], videoUrl: "https://cdn/v.mp4" }),
-      "Fallback"
-    );
-    expect(text).toContain("Video**: https://cdn/v.mp4");
-  });
-
-  it("output 비어있으면 렌더러 스킵 (메타만)", () => {
-    const text = formatSyncResult(makeSync({}), "Empty");
-    expect(text).toContain("Empty completed.");
-    expect(text).toContain("Credits charged");
-    expect(text).toContain(": 3");
-    expect(text).not.toContain("Images**");
-    expect(text).not.toContain("Video**");
-  });
-});
+// ── formatAsyncResult ────────────────────────────────────────────────
 
 describe("formatAsyncResult", () => {
   it("모든 메타 + get_request 안내 포함", () => {

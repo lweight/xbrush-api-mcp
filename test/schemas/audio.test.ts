@@ -20,10 +20,13 @@ describe("TtsGenerateSchema", () => {
       voice_id: "ko-female-1",
       language: "ko",
       speed: 1.25,
-      sync: true,
     });
     expect(result.voice_id).toBe("ko-female-1");
     expect(result.speed).toBe(1.25);
+  });
+
+  it("sync 필드 거부 (async 전용)", () => {
+    expect(() => TtsGenerateSchema.parse({ ...base, sync: true })).toThrow();
   });
 
   it("text 누락 거부", () => {

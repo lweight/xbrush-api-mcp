@@ -1,7 +1,10 @@
 /**
- * Sync/Async dispatch helper.
- * Removes the boilerplate of branching between `.../sync` and async endpoints
- * across image, video, audio, lip-sync and watermark tools.
+ * Async submission helper for generation tools.
+ *
+ * MCP tools never call /sync endpoints (rule: stdio tools must not block;
+ * sync endpoints also have a dual-shape contract that complicates parsing).
+ * Every generation tool POSTs to the async endpoint, returns the request_id,
+ * and the caller polls with `xbrush_get_request`.
  *
  * Lives in its own module so tests that mock `makeApiRequest` intercept
  * calls made from within this helper.
@@ -9,47 +12,28 @@
 
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { TIMEOUT_ASYNC_POST } from "../constants.js";
-import type { XBrushAsyncResponse, XBrushSyncResponse } from "../types.js";
+import type { XBrushAsyncResponse } from "../types.js";
 import {
   buildToolResult,
   formatAsyncResult,
-  formatSyncResult,
   handleToolError,
   makeApiRequest,
 } from "./xbrush-client.js";
 
-export interface SubmitOptions<
-  S extends XBrushSyncResponse = XBrushSyncResponse,
-  A extends XBrushAsyncResponse = XBrushAsyncResponse,
-> {
-  useSync: boolean;
-  syncUrl: string;
-  asyncUrl: string;
-  syncTimeout: number;
+export interface SubmitAsyncOptions<A extends XBrushAsyncResponse = XBrushAsyncResponse> {
+  url: string;
   body: Record<string, unknown>;
   label: string;
-  formatSync?: (r: S, label: string) => string;
   formatAsync?: (r: A, label: string) => string;
 }
 
-export async function submitSyncOrAsync<
-  S extends XBrushSyncResponse = XBrushSyncResponse,
-  A extends XBrushAsyncResponse = XBrushAsyncResponse,
->(opts: SubmitOptions<S, A>): Promise<CallToolResult> {
+export async function submitAsync<A extends XBrushAsyncResponse = XBrushAsyncResponse>(
+  opts: SubmitAsyncOptions<A>
+): Promise<CallToolResult> {
   try {
-    if (opts.useSync) {
-      const response = await makeApiRequest<S>({
-        method: "POST",
-        url: opts.syncUrl,
-        data: opts.body,
-        timeout: opts.syncTimeout,
-      });
-      const formatter = opts.formatSync ?? formatSyncResult;
-      return buildToolResult(formatter(response, opts.label));
-    }
     const response = await makeApiRequest<A>({
       method: "POST",
-      url: opts.asyncUrl,
+      url: opts.url,
       data: opts.body,
       timeout: TIMEOUT_ASYNC_POST,
     });

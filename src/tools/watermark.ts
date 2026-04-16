@@ -1,11 +1,12 @@
 /**
  * Watermark tool: xbrush_watermark_add
+ *
+ * Submits async and returns a request_id. Caller polls with `xbrush_get_request`.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WatermarkAddSchema } from "../schemas/watermark.js";
-import { submitSyncOrAsync } from "../services/dispatch.js";
-import { SYNC_TIMEOUTS } from "../constants.js";
+import { submitAsync } from "../services/dispatch.js";
 
 export function registerWatermarkTools(server: McpServer): void {
   server.registerTool(
@@ -15,12 +16,11 @@ export function registerWatermarkTools(server: McpServer): void {
       description: [
         "Apply the XBrush watermark to a target image or video.",
         "The watermark content is fixed by the server — no customization is accepted.",
-        "Sync by default (watermarking is typically fast).",
+        "Submits async — poll the returned request_id with xbrush_get_request.",
         "",
         "Args:",
         "  image_url (string, optional): Target image URL.",
         "  video_url (string, optional): Target video URL (one of image_url/video_url required).",
-        "  sync (bool, optional): Default: true (sync).",
       ].join("\n"),
       inputSchema: WatermarkAddSchema,
       annotations: {
@@ -35,11 +35,8 @@ export function registerWatermarkTools(server: McpServer): void {
       if (args.image_url !== undefined) body.imageUrl = args.image_url;
       if (args.video_url !== undefined) body.videoUrl = args.video_url;
 
-      return submitSyncOrAsync({
-        useSync: args.sync !== false,
-        syncUrl: "/v1/watermark/add/sync",
-        asyncUrl: "/v1/watermark/add",
-        syncTimeout: SYNC_TIMEOUTS.audio_short,
+      return submitAsync({
+        url: "/v1/watermark/add",
         body,
         label: "Watermark",
       });

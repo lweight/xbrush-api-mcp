@@ -36,12 +36,6 @@ export const TtsGenerateSchema = z
       .max(2.0)
       .optional()
       .describe("Speech rate multiplier (0.5-2.0). Default: 1.0."),
-    sync: z
-      .boolean()
-      .optional()
-      .describe(
-        "If true, wait for result (sync). Default: false (async, poll with xbrush_get_request)."
-      ),
   })
   .strict();
 
@@ -64,12 +58,6 @@ export const MusicGenerateSchema = z
       .optional()
       .describe("Styles/elements to exclude from the generated music."),
     seed: z.number().int().optional().describe("Random seed for reproducibility."),
-    sync: z
-      .boolean()
-      .optional()
-      .describe(
-        "If true, wait for result (can take minutes). Default: false (async)."
-      ),
   })
   .strict();
 
@@ -88,11 +76,5 @@ export const SoundEffectGenerateSchema = z
       .string()
       .optional()
       .describe("Optional text description biasing the sound (e.g. 'gentle rain on leaves')."),
-    sync: z
-      .boolean()
-      .optional()
-      .describe(
-        "If true, wait for result (sync). Default: false (async, poll with xbrush_get_request)."
-      ),
   })
   .strict();

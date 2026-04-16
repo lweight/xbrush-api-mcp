@@ -1,22 +1,12 @@
 /**
  * Lip-sync tool: xbrush_video_lip_sync
+ *
+ * Submits async and returns a request_id. Caller polls with `xbrush_get_request`.
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { VideoLipSyncSchema } from "../schemas/lip-sync.js";
-import { submitSyncOrAsync } from "../services/dispatch.js";
-import { SYNC_TIMEOUTS } from "../constants.js";
-import type { XBrushSyncResponse } from "../types.js";
-
-function formatLipSyncResult(r: XBrushSyncResponse, label: string): string {
-  const lines: string[] = [];
-  lines.push(`${label} completed.`);
-  lines.push("");
-  lines.push(`- **Request ID**: ${r.requestId}`);
-  lines.push(`- **Credits charged**: ${r.creditCharged}`);
-  if (r.output.videoUrl) lines.push(`- **Video**: ${r.output.videoUrl}`);
-  return lines.join("\n");
-}
+import { submitAsync } from "../services/dispatch.js";
 
 export function registerLipSyncTools(server: McpServer): void {
   server.registerTool(
@@ -25,13 +15,12 @@ export function registerLipSyncTools(server: McpServer): void {
       title: "Lip-sync Video",
       description: [
         "Sync a face video to speech audio (e.g. pixverse).",
-        "Async by default — lip-sync generation can take 30s to several minutes.",
+        "Submits async — lip-sync generation can take 30s to several minutes. Poll with xbrush_get_request.",
         "",
         "Args:",
         "  video_url (string, required): Face video URL.",
         "  audio_url (string, required): Audio URL to drive the mouth movement.",
         "  model (string, optional): Lip-sync model ID.",
-        "  sync (bool, optional): Default: false (async).",
       ].join("\n"),
       inputSchema: VideoLipSyncSchema,
       annotations: {
@@ -48,14 +37,10 @@ export function registerLipSyncTools(server: McpServer): void {
       };
       if (args.model !== undefined) body.model = args.model;
 
-      return submitSyncOrAsync({
-        useSync: args.sync === true,
-        syncUrl: "/v1/video/lip-sync/sync",
-        asyncUrl: "/v1/video/lip-sync",
-        syncTimeout: SYNC_TIMEOUTS.video,
+      return submitAsync({
+        url: "/v1/video/lip-sync",
         body,
         label: "Lip-sync",
-        formatSync: formatLipSyncResult,
       });
     }
   );

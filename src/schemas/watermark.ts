@@ -16,10 +16,6 @@ export const WatermarkAddSchema = z
       .url()
       .optional()
       .describe("Target video URL (use either image_url or video_url)."),
-    sync: z
-      .boolean()
-      .optional()
-      .describe("If false, submit async. Default: true (sync — watermarking is fast)."),
   })
   .strict()
   .refine((v) => v.image_url !== undefined || v.video_url !== undefined, {

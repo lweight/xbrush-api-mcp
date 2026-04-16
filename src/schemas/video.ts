@@ -8,7 +8,6 @@ export const VideoGenerateSchema = z
     end_image_url: z.string().url().optional().describe("URL of the end image (last frame). Creates a transition from start to end."),
     duration: z.union([z.literal(5), z.literal(10)]).optional().describe("Video duration in seconds: 5 or 10. Default depends on model."),
     prompt_relevance: z.number().min(0).max(1).optional().describe("How closely to follow the prompt (0.0-1.0)."),
-    sync: z.boolean().optional().describe("If true, wait for result (may take 2-10 min). Default: false (async, poll with xbrush_get_request)."),
   })
   .strict();
 
@@ -25,6 +24,5 @@ export const VideoUpscaleSchema = z
       .string()
       .optional()
       .describe("Upscale model ID (e.g. RealESRGAN, seedvr). Server default if omitted."),
-    sync: z.boolean().optional().describe("If true, wait for result. Default: false (async, poll with xbrush_get_request)."),
   })
   .strict();

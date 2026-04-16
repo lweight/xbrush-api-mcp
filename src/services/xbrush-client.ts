@@ -11,8 +11,6 @@ import { API_BASE_URL, CHARACTER_LIMIT, TIMEOUT_GET } from "../constants.js";
 import type {
   XBrushAsyncResponse,
   XBrushErrorResponse,
-  XBrushOutput,
-  XBrushSyncResponse,
 } from "../types.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
@@ -219,48 +217,6 @@ function truncateText(text: string): string {
 }
 
 // ── Default Formatters ────────────────────────────────────────────────
-
-const OUTPUT_RENDERERS: Array<{ test: (o: XBrushOutput) => boolean; render: (o: XBrushOutput) => string[] }> = [
-  {
-    test: (o) => Array.isArray(o.imageUrls) && o.imageUrls.length > 0,
-    render: (o) => {
-      const urls = o.imageUrls as string[];
-      const lines = [`- **Images** (${urls.length}):`];
-      urls.forEach((url, i) => lines.push(`  ${i + 1}. ${url}`));
-      return lines;
-    },
-  },
-  {
-    test: (o) => typeof o.videoUrl === "string" && o.videoUrl.length > 0,
-    render: (o) => [`- **Video**: ${o.videoUrl}`],
-  },
-  {
-    test: (o) => typeof o.audioUrl === "string" && (o.audioUrl as string).length > 0,
-    render: (o) => [`- **Audio**: ${o.audioUrl}`],
-  },
-  {
-    test: (o) => typeof o.url === "string" && (o.url as string).length > 0,
-    render: (o) => [`- **URL**: ${o.url}`],
-  },
-];
-
-export function formatSyncResult(r: XBrushSyncResponse, label: string): string {
-  const lines: string[] = [];
-  lines.push(`${label} completed.`);
-  lines.push("");
-  lines.push(`- **Request ID**: ${r.requestId}`);
-  lines.push(`- **Credits charged**: ${r.creditCharged}`);
-
-  // First-match only: avoid rendering multiple output fields if the server
-  // returns overlapping keys (e.g. videoUrl + imageUrls thumbnails together).
-  // Domain-specific formatters (video, lip-sync) handle their own composition.
-  const renderer = OUTPUT_RENDERERS.find((r2) => r2.test(r.output));
-  if (renderer) {
-    lines.push(...renderer.render(r.output));
-  }
-
-  return lines.join("\n");
-}
 
 export function formatAsyncResult(r: XBrushAsyncResponse, label: string): string {
   const lines: string[] = [];

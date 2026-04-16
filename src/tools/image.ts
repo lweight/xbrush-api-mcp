@@ -1,5 +1,9 @@
 /**
  * Image tools: generate, edit, upscale, remove_bg
+ *
+ * All tools submit asynchronously and return a request_id. Callers must poll
+ * the result with `xbrush_get_request`. /sync endpoints are intentionally not
+ * used (see CLAUDE.md "Async only").
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -9,13 +13,12 @@ import {
   ImageUpscaleSchema,
   ImageRemoveBgSchema,
 } from "../schemas/image.js";
-import { submitSyncOrAsync } from "../services/dispatch.js";
-import { SYNC_TIMEOUTS } from "../constants.js";
+import { submitAsync } from "../services/dispatch.js";
 
 // ── Tool Registration ─────────────────────────────────────────────────
 
 export function registerImageTools(server: McpServer): void {
-  // ── xbrush_image_generate (sync) ────────────────────────────────────
+  // ── xbrush_image_generate ──────────────────────────────────────────
 
   server.registerTool(
     "xbrush_image_generate",
@@ -23,7 +26,7 @@ export function registerImageTools(server: McpServer): void {
       title: "Generate Image",
       description: [
         "Generate images from a text prompt using XBrush AI models.",
-        "By default sync (returns URLs directly). Set sync=false for async.",
+        "Submits async — poll the returned request_id with xbrush_get_request.",
         "",
         "Args:",
         "  model (string, required): Model ID (e.g. z-image-turbo). Use xbrush_list_models to see options.",
@@ -33,7 +36,6 @@ export function registerImageTools(server: McpServer): void {
         "  width (int, optional): Width in pixels (256-4096). Default: 1024.",
         "  height (int, optional): Height in pixels (256-4096). Default: 1024.",
         "  seed (int, optional): Random seed for reproducibility.",
-        "  sync (bool, optional): Default: true. Set false for async.",
       ].join("\n"),
       inputSchema: ImageGenerateSchema,
       annotations: {
@@ -54,18 +56,15 @@ export function registerImageTools(server: McpServer): void {
       if (args.height !== undefined) body.height = args.height;
       if (args.seed !== undefined) body.seed = args.seed;
 
-      return submitSyncOrAsync({
-        useSync: args.sync !== false,
-        syncUrl: "/v1/image/generate/sync",
-        asyncUrl: "/v1/image/generate",
-        syncTimeout: SYNC_TIMEOUTS.image,
+      return submitAsync({
+        url: "/v1/image/generate",
         body,
         label: "Image generation",
       });
     }
   );
 
-  // ── xbrush_image_edit (default async) ──────────────────────────────
+  // ── xbrush_image_edit ──────────────────────────────────────────────
 
   server.registerTool(
     "xbrush_image_edit",
@@ -73,7 +72,7 @@ export function registerImageTools(server: McpServer): void {
       title: "Edit Image",
       description: [
         "Edit an image with text instructions (inpaint/outpaint).",
-        "By default async. Set sync=true to wait for result directly.",
+        "Submits async — poll the returned request_id with xbrush_get_request.",
         "",
         "Args:",
         "  model (string, required): Edit model (e.g. qwen-image-edit-re, gemini-2.5-flash-edit).",
@@ -85,7 +84,6 @@ export function registerImageTools(server: McpServer): void {
         "  width (int, optional): Output width (256-4096). For outpaint, target canvas width.",
         "  height (int, optional): Output height (256-4096). For outpaint, target canvas height.",
         "  seed (int, optional): Random seed.",
-        "  sync (bool, optional): Default: false. Set true for sync.",
       ].join("\n"),
       inputSchema: ImageEditSchema,
       annotations: {
@@ -108,18 +106,15 @@ export function registerImageTools(server: McpServer): void {
       if (args.height !== undefined) body.height = args.height;
       if (args.seed !== undefined) body.seed = args.seed;
 
-      return submitSyncOrAsync({
-        useSync: args.sync === true,
-        syncUrl: "/v1/image/edit/sync",
-        asyncUrl: "/v1/image/edit",
-        syncTimeout: SYNC_TIMEOUTS.image,
+      return submitAsync({
+        url: "/v1/image/edit",
         body,
         label: "Image edit",
       });
     }
   );
 
-  // ── xbrush_image_upscale (default async) ───────────────────────────
+  // ── xbrush_image_upscale ───────────────────────────────────────────
 
   server.registerTool(
     "xbrush_image_upscale",
@@ -127,12 +122,11 @@ export function registerImageTools(server: McpServer): void {
       title: "Upscale Image",
       description: [
         "Upscale an image to higher resolution.",
-        "By default async. Set sync=true to wait for result directly.",
+        "Submits async — poll the returned request_id with xbrush_get_request.",
         "",
         "Args:",
         "  image_url (string, required): URL of the image to upscale.",
         "  upscale_factor (int, optional): 2x or 4x. Default: 2.",
-        "  sync (bool, optional): Default: false. Set true for sync.",
       ].join("\n"),
       inputSchema: ImageUpscaleSchema,
       annotations: {
@@ -148,18 +142,15 @@ export function registerImageTools(server: McpServer): void {
       };
       if (args.upscale_factor !== undefined) body.upscaleFactor = args.upscale_factor;
 
-      return submitSyncOrAsync({
-        useSync: args.sync === true,
-        syncUrl: "/v1/image/upscale/sync",
-        asyncUrl: "/v1/image/upscale",
-        syncTimeout: SYNC_TIMEOUTS.image,
+      return submitAsync({
+        url: "/v1/image/upscale",
         body,
         label: "Image upscale",
       });
     }
   );
 
-  // ── xbrush_image_remove_bg (sync) ───────────────────────────────────
+  // ── xbrush_image_remove_bg ─────────────────────────────────────────
 
   server.registerTool(
     "xbrush_image_remove_bg",
@@ -167,7 +158,7 @@ export function registerImageTools(server: McpServer): void {
       title: "Remove Background",
       description: [
         "Remove the background from an image.",
-        "Returns the result image URL directly (sync).",
+        "Submits async — poll the returned request_id with xbrush_get_request.",
         "",
         "Args:",
         "  image_url (string, required): URL of the image.",
@@ -181,11 +172,8 @@ export function registerImageTools(server: McpServer): void {
       },
     },
     async (args) =>
-      submitSyncOrAsync({
-        useSync: true,
-        syncUrl: "/v1/image/remove-background/sync",
-        asyncUrl: "/v1/image/remove-background",
-        syncTimeout: SYNC_TIMEOUTS.image,
+      submitAsync({
+        url: "/v1/image/remove-background",
         body: { imageUrl: args.image_url },
         label: "Background removal",
       })

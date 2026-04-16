@@ -18,11 +18,5 @@ export const VideoLipSyncSchema = z
       .string()
       .url()
       .describe("URL of the audio to lip-sync onto the video."),
-    sync: z
-      .boolean()
-      .optional()
-      .describe(
-        "If true, wait for result (can take minutes). Default: false (async, poll with xbrush_get_request)."
-      ),
   })
   .strict();

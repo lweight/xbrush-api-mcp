@@ -92,10 +92,6 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "description": "Random seed for reproducible results.",
       "type": "integer",
     },
-    "sync": {
-      "description": "If true, wait for result (sync). Default: false (async, poll with xbrush_get_request).",
-      "type": "boolean",
-    },
     "width": {
       "description": "Output width in pixels (256-4096). For outpaint, the target canvas width.",
       "maximum": 4096,
@@ -145,10 +141,6 @@ exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
     "seed": {
       "description": "Random seed for reproducible results.",
       "type": "integer",
-    },
-    "sync": {
-      "description": "If false, submit async and poll with xbrush_get_request. Default: true (sync).",
-      "type": "boolean",
     },
     "width": {
       "description": "Output width in pixels (256-4096). Default: 1024.",
@@ -212,10 +204,6 @@ exports[`도구 스키마 스냅샷 > xbrush_music_generate 1`] = `
       "description": "Random seed for reproducibility.",
       "type": "integer",
     },
-    "sync": {
-      "description": "If true, wait for result (can take minutes). Default: false (async).",
-      "type": "boolean",
-    },
   },
   "required": [
     "prompt",
@@ -242,10 +230,6 @@ exports[`도구 스키마 스냅샷 > xbrush_tts_generate 1`] = `
       "maximum": 2,
       "minimum": 0.5,
       "type": "number",
-    },
-    "sync": {
-      "description": "If true, wait for result (sync). Default: false (async, poll with xbrush_get_request).",
-      "type": "boolean",
     },
     "text": {
       "description": "Text to synthesize (non-blank).",
@@ -277,10 +261,6 @@ exports[`도구 스키마 스냅샷 > xbrush_video_lip_sync 1`] = `
     "model": {
       "description": "Lip-sync model ID (e.g. pixverse). Defaults to the server's default model.",
       "type": "string",
-    },
-    "sync": {
-      "description": "If true, wait for result (can take minutes). Default: false (async, poll with xbrush_get_request).",
-      "type": "boolean",
     },
     "video_url": {
       "description": "URL of the source video (face must be visible).",

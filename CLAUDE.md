@@ -11,7 +11,7 @@
 ```
 src/
 ├── index.ts              ← 서버 엔트리, 8개 도구 모듈 등록
-├── constants.ts          ← API 베이스 URL, 타임아웃 테이블(SYNC_TIMEOUTS), 응답 크기 한도
+├── constants.ts          ← API 베이스 URL, 타임아웃 상수, 응답 크기 한도
 ├── types.ts              ← 공통 타입 정의
 ├── tool-filter.ts        ← XBRUSH_DISABLED_TOOLS 환경변수 처리
 ├── schemas/              ← Zod 입력 스키마
@@ -24,7 +24,7 @@ src/
 │   ├── video.ts
 │   └── watermark.ts
 ├── services/
-│   ├── dispatch.ts       ← submitSyncOrAsync 헬퍼 (sync/async 분기 통합)
+│   ├── dispatch.ts       ← submitAsync 헬퍼 (async 단일 경로)
 │   ├── file-upload.ts    ← 파일 업로드 (presign / direct / auto)
 │   └── xbrush-client.ts  ← HTTP 클라이언트 + 에러 매핑 + 기본 포맷터
 └── tools/                ← MCP 도구 핸들러
@@ -58,22 +58,19 @@ npm test             # Vitest 전체 실행
 ## API 특성
 - **인증**: `X-API-Key` 헤더
 - **응답 truncation**: 25,000자 초과 시 자동 잘림
-- **타임아웃 테이블** (`SYNC_TIMEOUTS`):
-  - `image`: 120초 (image generate/edit/upscale/remove-bg)
-  - `audio_short`: 60초 (tts, sound-effect, watermark)
-  - `audio_long`: 180초 (music generate)
-  - `video`: 600초 (video generate/upscale/lip-sync)
-  - `TIMEOUT_ASYNC_POST`: 30초 (async 제출)
+- **타임아웃**:
+  - `TIMEOUT_ASYNC_POST`: 30초 (async POST 제출)
   - `TIMEOUT_GET`: 10초 (GET 요청)
+  - `TIMEOUT_UPLOAD`: 180초 (파일 업로드 본문 전송)
 - **입력 검증**: Zod strict mode (미정의 필드 거부)
 - **Tool annotations**: `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` 명시
 - **생성 도구의 `idempotentHint`는 반드시 false** — 중복 과금 방지
 
-## Sync vs Async
-- **기본 Sync**: `image_generate`, `image_remove_bg`, `watermark_add`
-- **기본 Async**: `image_edit`, `image_upscale`, `video_generate`, `video_upscale`, `video_lip_sync`, `tts_generate`, `music_generate`, `sound_effect_generate`
-- 모두 `sync` 파라미터로 모드 전환 가능 (단, `image_remove_bg`는 sync 전용)
-- async → `xbrush_get_request(request_id)`로 폴링
+## Async-only (중요)
+- **모든 생성 도구는 async 단일 경로**. `/sync` 엔드포인트는 호출하지 않는다 (빠른 모델/느린 모델 무관).
+- 사유: `/sync` 엔드포인트가 처리시간 초과 시 `{ syncCompleted: false, status: "pending", output: undefined }`를 HTTP 202로 반환하는 dual-shape contract여서 client 처리가 복잡해지고, MCP stdio 도구는 장시간 블록되면 client timeout 위험이 큼.
+- 모든 도구 호출 → `request_id` 반환 → `xbrush_get_request(request_id)`로 폴링.
+- 스키마에 `sync` 필드 없음. 전달 시 strict 모드로 거부됨.
 
 ## 파일 업로드 플로우
 `xbrush_file_upload`에 `strategy` 파라미터로 경로 선택:
@@ -85,15 +82,15 @@ npm test             # Vitest 전체 실행
 반환된 CDN URL을 다른 도구의 `image_url`/`video_url`/`audio_url` 입력으로 사용.
 
 ## 도구 추가 패턴
-1. `src/schemas/<domain>.ts` — Zod 입력 스키마 정의 (strict)
-2. `src/tools/<domain>.ts` — `submitSyncOrAsync` 헬퍼 사용
+1. `src/schemas/<domain>.ts` — Zod 입력 스키마 정의 (strict, **`sync` 필드 추가 금지**)
+2. `src/tools/<domain>.ts` — `submitAsync` 헬퍼 사용 (async URL만 전달)
 3. `src/index.ts` — 새 모듈이면 `registerXxxTools(server)` 등록
 4. `test/schemas/<domain>.test.ts` + `test/tools/<domain>.test.ts` 추가
 5. `test/integration/server.test.ts`의 도구 개수/이름 목록 업데이트
 
 ## 테스트
 - **Vitest 4-tier**: `test/{schemas,services,tools,integration}/`
-- 현재 v1.2.0 기준 **240+ 케이스** 통과
+- 현재 v2.0.0 기준 **243 케이스** 통과
 - `npm test` / `npm run test:watch`
 - 통합 테스트는 axios mock 사용, 실 API 호출 없음
 - MCP Inspector 또는 Claude Code에서 수동 E2E

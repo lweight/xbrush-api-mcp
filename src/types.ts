@@ -1,16 +1,3 @@
-// ── Sync response (completed immediately) ─────────────────────────────
-
-export interface XBrushSyncResponse {
-  requestId: string;
-  status: "completed";
-  domain: string;
-  action: string;
-  creditCharged: number;
-  output: XBrushOutput;
-  completedAt: string;
-  syncCompleted: true;
-}
-
 // ── Async response (pending, poll later) ──────────────────────────────
 
 export interface XBrushAsyncResponse {

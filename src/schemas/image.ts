@@ -9,7 +9,6 @@ export const ImageGenerateSchema = z
     width: z.number().int().min(256).max(4096).optional().describe("Output width in pixels (256-4096). Default: 1024."),
     height: z.number().int().min(256).max(4096).optional().describe("Output height in pixels (256-4096). Default: 1024."),
     seed: z.number().int().optional().describe("Random seed for reproducible results."),
-    sync: z.boolean().optional().describe("If false, submit async and poll with xbrush_get_request. Default: true (sync)."),
   })
   .strict();
 
@@ -27,7 +26,6 @@ export const ImageEditSchema = z
     width: z.number().int().min(256).max(4096).optional().describe("Output width in pixels (256-4096). For outpaint, the target canvas width."),
     height: z.number().int().min(256).max(4096).optional().describe("Output height in pixels (256-4096). For outpaint, the target canvas height."),
     seed: z.number().int().optional().describe("Random seed for reproducible results."),
-    sync: z.boolean().optional().describe("If true, wait for result (sync). Default: false (async, poll with xbrush_get_request)."),
   })
   .strict();
 
@@ -35,7 +33,6 @@ export const ImageUpscaleSchema = z
   .object({
     image_url: z.string().url().describe("URL of the image to upscale."),
     upscale_factor: z.number().int().min(2).max(4).optional().describe("Upscale multiplier: 2 or 4. Default: 2."),
-    sync: z.boolean().optional().describe("If true, wait for result (sync). Default: false (async, poll with xbrush_get_request)."),
   })
   .strict();
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { createMockServer } from "./_helpers.js";
-import type { XBrushSyncResponse, XBrushAsyncResponse } from "../../src/types.js";
+import type { XBrushAsyncResponse } from "../../src/types.js";
 
 // Mock makeApiRequest — 나머지 함수는 실제 로직 사용
 vi.mock("../../src/services/xbrush-client.js", async () => {
@@ -18,22 +18,11 @@ import { registerImageTools } from "../../src/tools/image.js";
 
 const mockedApi = vi.mocked(makeApiRequest);
 
-const mockSync: XBrushSyncResponse = {
-  requestId: "req" + "a".repeat(21),
-  status: "completed",
-  domain: "image",
-  action: "generate",
-  creditCharged: 5,
-  output: { imageUrls: ["https://assets.xbrush.ai/img1.png"] },
-  completedAt: "2025-01-01T00:00:00Z",
-  syncCompleted: true,
-};
-
 const mockAsync: XBrushAsyncResponse = {
   requestId: "req" + "b".repeat(21),
   status: "pending",
   domain: "image",
-  action: "edit",
+  action: "generate",
   creditCharged: 10,
   estimatedTimeout: 60,
 };
@@ -49,39 +38,30 @@ beforeAll(() => {
 // ── xbrush_image_generate ────────────────────────────────────────────
 
 describe("xbrush_image_generate", () => {
-  it("성공 — 이미지 URL 포함", async () => {
-    mockedApi.mockResolvedValueOnce(mockSync);
+  it("성공 — async 제출 + request_id 안내", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
     const result = await handlers.get("xbrush_image_generate")!({
       model: "z-image-turbo",
       prompt: "a cat",
     });
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain("completed");
-    expect(result.content[0].text).toContain("https://assets.xbrush.ai/img1.png");
+    expect(result.content[0].text).toContain("submitted (async)");
+    expect(result.content[0].text).toContain(mockAsync.requestId);
+    expect(result.content[0].text).toContain("xbrush_get_request");
   });
 
-  it("성공 — 이미지 3개", async () => {
-    const multiSync = {
-      ...mockSync,
-      output: {
-        imageUrls: [
-          "https://assets.xbrush.ai/1.png",
-          "https://assets.xbrush.ai/2.png",
-          "https://assets.xbrush.ai/3.png",
-        ],
-      },
-    };
-    mockedApi.mockResolvedValueOnce(multiSync);
-    const result = await handlers.get("xbrush_image_generate")!({
+  it("/v1/image/generate (async 단일 경로)", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    await handlers.get("xbrush_image_generate")!({
       model: "z-image-turbo",
-      prompt: "cats",
-      n: 3,
+      prompt: "a cat",
     });
-    expect(result.content[0].text).toContain("3.png");
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.url).toBe("/v1/image/generate");
   });
 
   it("optional 파라미터 → API body 매핑", async () => {
-    mockedApi.mockResolvedValueOnce(mockSync);
+    mockedApi.mockResolvedValueOnce(mockAsync);
     await handlers.get("xbrush_image_generate")!({
       model: "z-image-turbo",
       prompt: "a cat",
@@ -93,29 +73,6 @@ describe("xbrush_image_generate", () => {
     expect(callArgs.data.negativePrompt).toBe("blur");
     expect(callArgs.data.width).toBe(512);
     expect(callArgs.data.seed).toBe(42);
-  });
-
-  it("sync=false → async 모드 + /v1/image/generate 호출", async () => {
-    mockedApi.mockResolvedValueOnce(mockAsync);
-    const result = await handlers.get("xbrush_image_generate")!({
-      model: "z-image-turbo",
-      prompt: "a cat",
-      sync: false,
-    });
-    expect(result.content[0].text).toContain("async");
-    expect(result.content[0].text).toContain("xbrush_get_request");
-    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
-    expect(callArgs.url).toBe("/v1/image/generate");
-  });
-
-  it("sync 미지정 → 기본 sync 모드", async () => {
-    mockedApi.mockResolvedValueOnce(mockSync);
-    await handlers.get("xbrush_image_generate")!({
-      model: "z-image-turbo",
-      prompt: "a cat",
-    });
-    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
-    expect(callArgs.url).toBe("/v1/image/generate/sync");
   });
 
   it("API 에러 → isError 결과 + 메시지 포함", async () => {
@@ -140,7 +97,7 @@ describe("xbrush_image_edit", () => {
       prompt: "make blue",
       image_url: "https://assets.xbrush.ai/src.png",
     });
-    expect(result.content[0].text).toContain("async");
+    expect(result.content[0].text).toContain("submitted (async)");
     expect(result.content[0].text).toContain(mockAsync.requestId);
     expect(result.content[0].text).toContain("xbrush_get_request");
   });
@@ -185,20 +142,7 @@ describe("xbrush_image_edit", () => {
     expect("mode" in callArgs.data).toBe(false);
   });
 
-  it("sync=true → sync 모드 + /v1/image/edit/sync 호출", async () => {
-    mockedApi.mockResolvedValueOnce(mockSync);
-    const result = await handlers.get("xbrush_image_edit")!({
-      model: "qwen-image-edit-re",
-      prompt: "make blue",
-      image_url: "https://assets.xbrush.ai/src.png",
-      sync: true,
-    });
-    expect(result.content[0].text).toContain("completed");
-    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
-    expect(callArgs.url).toBe("/v1/image/edit/sync");
-  });
-
-  it("sync 미지정 → 기본 async 모드", async () => {
+  it("/v1/image/edit (async 단일 경로)", async () => {
     mockedApi.mockResolvedValueOnce(mockAsync);
     await handlers.get("xbrush_image_edit")!({
       model: "m",
@@ -230,7 +174,7 @@ describe("xbrush_image_upscale", () => {
     const result = await handlers.get("xbrush_image_upscale")!({
       image_url: "https://assets.xbrush.ai/src.png",
     });
-    expect(result.content[0].text).toContain("async");
+    expect(result.content[0].text).toContain("submitted (async)");
     expect(result.content[0].text).toContain("xbrush_get_request");
   });
 
@@ -244,18 +188,7 @@ describe("xbrush_image_upscale", () => {
     expect(callArgs.data.upscaleFactor).toBe(4);
   });
 
-  it("sync=true → /v1/image/upscale/sync 호출", async () => {
-    mockedApi.mockResolvedValueOnce(mockSync);
-    const result = await handlers.get("xbrush_image_upscale")!({
-      image_url: "https://a.com/i.png",
-      sync: true,
-    });
-    expect(result.content[0].text).toContain("completed");
-    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
-    expect(callArgs.url).toBe("/v1/image/upscale/sync");
-  });
-
-  it("sync 미지정 → 기본 async 모드", async () => {
+  it("/v1/image/upscale (async 단일 경로)", async () => {
     mockedApi.mockResolvedValueOnce(mockAsync);
     await handlers.get("xbrush_image_upscale")!({
       image_url: "https://a.com/i.png",
@@ -268,21 +201,22 @@ describe("xbrush_image_upscale", () => {
 // ── xbrush_image_remove_bg ───────────────────────────────────────────
 
 describe("xbrush_image_remove_bg", () => {
-  it("성공", async () => {
-    mockedApi.mockResolvedValueOnce(mockSync);
+  it("성공 — async 제출", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
     const result = await handlers.get("xbrush_image_remove_bg")!({
       image_url: "https://assets.xbrush.ai/src.png",
     });
     expect(result.content[0].text).toContain("Background removal");
-    expect(result.content[0].text).toContain("completed");
+    expect(result.content[0].text).toContain("submitted (async)");
   });
 
-  it("image_url → imageUrl 매핑", async () => {
-    mockedApi.mockResolvedValueOnce(mockSync);
+  it("image_url → imageUrl 매핑 + /v1/image/remove-background", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
     await handlers.get("xbrush_image_remove_bg")!({
       image_url: "https://a.com/photo.jpg",
     });
     const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
     expect(callArgs.data.imageUrl).toBe("https://a.com/photo.jpg");
+    expect(callArgs.url).toBe("/v1/image/remove-background");
   });
 });

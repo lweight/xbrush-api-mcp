@@ -11,15 +11,19 @@ describe("VideoLipSyncSchema", () => {
     expect(r.audio_url).toBe(A);
   });
 
-  it("model, sync optional 유효", () => {
+  it("model optional 유효", () => {
     const r = VideoLipSyncSchema.parse({
       video_url: V,
       audio_url: A,
       model: "pixverse",
-      sync: true,
     });
     expect(r.model).toBe("pixverse");
-    expect(r.sync).toBe(true);
+  });
+
+  it("sync 필드 거부 (async 전용)", () => {
+    expect(() =>
+      VideoLipSyncSchema.parse({ video_url: V, audio_url: A, sync: true })
+    ).toThrow();
   });
 
   it("video_url 누락 거부", () => {
@@ -42,9 +46,4 @@ describe("VideoLipSyncSchema", () => {
     ).toThrow();
   });
 
-  it("sync 숫자 거부", () => {
-    expect(() =>
-      VideoLipSyncSchema.parse({ video_url: V, audio_url: A, sync: 1 as any })
-    ).toThrow();
-  });
 });

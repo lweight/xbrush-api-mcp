@@ -1,5 +1,9 @@
 /**
  * Audio tools: tts_generate, music_generate, sound_effect_generate
+ *
+ * All tools submit asynchronously and return a request_id. Callers must poll
+ * the result with `xbrush_get_request`. /sync endpoints are intentionally not
+ * used (see CLAUDE.md "Async only").
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -8,8 +12,7 @@ import {
   MusicGenerateSchema,
   SoundEffectGenerateSchema,
 } from "../schemas/audio.js";
-import { submitSyncOrAsync } from "../services/dispatch.js";
-import { SYNC_TIMEOUTS } from "../constants.js";
+import { submitAsync } from "../services/dispatch.js";
 
 // ── Tool Registration ─────────────────────────────────────────────────
 
@@ -22,7 +25,7 @@ export function registerAudioTools(server: McpServer): void {
       title: "Generate Speech (TTS)",
       description: [
         "Generate speech audio from text using an XBrush TTS model (e.g. speech-2.6-hd, eleven_v3).",
-        "By default async — returns a request ID you poll with xbrush_get_request.",
+        "Submits async — poll the returned request_id with xbrush_get_request.",
         "",
         "Args:",
         "  text (string, required): Text to speak.",
@@ -30,7 +33,6 @@ export function registerAudioTools(server: McpServer): void {
         "  voice_id (string, optional): Voice selector (model-specific).",
         "  language (string, optional): Locale code (e.g. 'ko', 'en').",
         "  speed (float, optional): Speech rate (0.5-2.0). Default: 1.0.",
-        "  sync (bool, optional): Default: false (async). Set true to wait.",
       ].join("\n"),
       inputSchema: TtsGenerateSchema,
       annotations: {
@@ -49,11 +51,8 @@ export function registerAudioTools(server: McpServer): void {
       if (args.language !== undefined) body.language = args.language;
       if (args.speed !== undefined) body.speed = args.speed;
 
-      return submitSyncOrAsync({
-        useSync: args.sync === true,
-        syncUrl: "/v1/tts/generate/sync",
-        asyncUrl: "/v1/tts/generate",
-        syncTimeout: SYNC_TIMEOUTS.audio_short,
+      return submitAsync({
+        url: "/v1/tts/generate",
         body,
         label: "TTS generation",
       });
@@ -68,7 +67,7 @@ export function registerAudioTools(server: McpServer): void {
       title: "Generate Music",
       description: [
         "Generate music from a text prompt using an XBrush music model (e.g. lyria2).",
-        "Async by default — generation typically takes tens of seconds to minutes.",
+        "Submits async — generation typically takes tens of seconds to minutes. Poll with xbrush_get_request.",
         "",
         "Args:",
         "  prompt (string, required): Text description of the music.",
@@ -76,7 +75,6 @@ export function registerAudioTools(server: McpServer): void {
         "  duration (int, optional): Duration in seconds (1-120).",
         "  negative_prompt (string, optional): Elements to exclude.",
         "  seed (int, optional): Random seed.",
-        "  sync (bool, optional): Default: false (async).",
       ].join("\n"),
       inputSchema: MusicGenerateSchema,
       annotations: {
@@ -95,11 +93,8 @@ export function registerAudioTools(server: McpServer): void {
       if (args.negative_prompt !== undefined) body.negativePrompt = args.negative_prompt;
       if (args.seed !== undefined) body.seed = args.seed;
 
-      return submitSyncOrAsync({
-        useSync: args.sync === true,
-        syncUrl: "/v1/music/generate/sync",
-        asyncUrl: "/v1/music/generate",
-        syncTimeout: SYNC_TIMEOUTS.audio_long,
+      return submitAsync({
+        url: "/v1/music/generate",
         body,
         label: "Music generation",
       });
@@ -115,12 +110,11 @@ export function registerAudioTools(server: McpServer): void {
       description: [
         "Generate foley / ambient sound effects for a given video.",
         "Takes a source video URL and returns audio appropriate to its visual content.",
-        "Async by default.",
+        "Submits async — poll the returned request_id with xbrush_get_request.",
         "",
         "Args:",
         "  video_url (string, required): Source video URL.",
         "  prompt (string, optional): Text hint biasing the sound design.",
-        "  sync (bool, optional): Default: false (async).",
       ].join("\n"),
       inputSchema: SoundEffectGenerateSchema,
       annotations: {
@@ -136,11 +130,8 @@ export function registerAudioTools(server: McpServer): void {
       };
       if (args.prompt !== undefined) body.prompt = args.prompt;
 
-      return submitSyncOrAsync({
-        useSync: args.sync === true,
-        syncUrl: "/v1/sound-effect/generate/sync",
-        asyncUrl: "/v1/sound-effect/generate",
-        syncTimeout: SYNC_TIMEOUTS.audio_short,
+      return submitAsync({
+        url: "/v1/sound-effect/generate",
         body,
         label: "Sound effect generation",
       });

@@ -51,14 +51,8 @@ describe("ImageGenerateSchema", () => {
     expect(() => ImageGenerateSchema.parse({ ...base, n: 10 })).toThrow();
   });
 
-  it("sync=true 유효", () => {
-    const result = ImageGenerateSchema.parse({ ...base, sync: true });
-    expect(result.sync).toBe(true);
-  });
-
-  it("sync=false 유효", () => {
-    const result = ImageGenerateSchema.parse({ ...base, sync: false });
-    expect(result.sync).toBe(false);
+  it("sync 필드 거부 (async 전용)", () => {
+    expect(() => ImageGenerateSchema.parse({ ...base, sync: true })).toThrow();
   });
 
   it("미정의 필드 거부 (strict)", () => {
@@ -100,9 +94,8 @@ describe("ImageEditSchema", () => {
     expect(result.n).toBe(2);
   });
 
-  it("sync=true 유효", () => {
-    const result = ImageEditSchema.parse({ ...base, sync: true });
-    expect(result.sync).toBe(true);
+  it("sync 필드 거부 (async 전용)", () => {
+    expect(() => ImageEditSchema.parse({ ...base, sync: true })).toThrow();
   });
 
   it("mode='inpaint' 유효", () => {
@@ -149,9 +142,8 @@ describe("ImageUpscaleSchema", () => {
     ).toThrow();
   });
 
-  it("sync=true 유효", () => {
-    const result = ImageUpscaleSchema.parse({ ...base, sync: true });
-    expect(result.sync).toBe(true);
+  it("sync 필드 거부 (async 전용)", () => {
+    expect(() => ImageUpscaleSchema.parse({ ...base, sync: true })).toThrow();
   });
 });
 

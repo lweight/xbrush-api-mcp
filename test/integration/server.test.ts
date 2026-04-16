@@ -27,7 +27,7 @@ import { registerVideoTools } from "../../src/tools/video.js";
 import { registerAudioTools } from "../../src/tools/audio.js";
 import { registerLipSyncTools } from "../../src/tools/lip-sync.js";
 import { registerWatermarkTools } from "../../src/tools/watermark.js";
-import type { XBrushSyncResponse } from "../../src/types.js";
+import type { XBrushAsyncResponse } from "../../src/types.js";
 
 const mockedApi = vi.mocked(makeApiRequest);
 
@@ -179,16 +179,14 @@ describe("도구 스키마 스냅샷", () => {
 // ── MCP 프로토콜 동작 ────────────────────────────────────────────────
 
 describe("MCP 프로토콜 동작", () => {
-  it("유효 입력 → 정상 응답", async () => {
-    const mockResponse: XBrushSyncResponse = {
+  it("유효 입력 → 정상 응답 (async 제출)", async () => {
+    const mockResponse: XBrushAsyncResponse = {
       requestId: "req" + "z".repeat(21),
-      status: "completed",
+      status: "pending",
       domain: "image",
       action: "generate",
       creditCharged: 5,
-      output: { imageUrls: ["https://assets.xbrush.ai/result.png"] },
-      completedAt: "2025-01-01T00:00:00Z",
-      syncCompleted: true,
+      estimatedTimeout: 60,
     };
     mockedApi.mockResolvedValueOnce(mockResponse);
 
@@ -198,7 +196,8 @@ describe("MCP 프로토콜 동작", () => {
     });
     expect(result.isError).toBeFalsy();
     const text = (result.content as Array<{ text: string }>)[0].text;
-    expect(text).toContain("completed");
+    expect(text).toContain("submitted (async)");
+    expect(text).toContain("xbrush_get_request");
   });
 
   it("Zod 검증 실패 → 에러 응답 (prompt 누락)", async () => {

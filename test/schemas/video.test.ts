@@ -15,7 +15,6 @@ describe("VideoGenerateSchema", () => {
     expect(result.model).toBe("kling");
     expect(result.image_url).toBe(VALID_URL);
     expect(result.prompt).toBeUndefined();
-    expect(result.sync).toBeUndefined();
   });
 
   it("전체 필드 유효", () => {
@@ -25,13 +24,15 @@ describe("VideoGenerateSchema", () => {
       end_image_url: VALID_URL,
       duration: 5,
       prompt_relevance: 0.7,
-      sync: true,
     });
     expect(result.prompt).toBe("camera zoom in");
     expect(result.end_image_url).toBe(VALID_URL);
     expect(result.duration).toBe(5);
     expect(result.prompt_relevance).toBe(0.7);
-    expect(result.sync).toBe(true);
+  });
+
+  it("sync 필드 거부 (async 전용)", () => {
+    expect(() => VideoGenerateSchema.parse({ ...base, sync: true })).toThrow();
   });
 
   it("model 누락 시 에러", () => {
@@ -106,7 +107,6 @@ describe("VideoUpscaleSchema", () => {
     const result = VideoUpscaleSchema.parse(base);
     expect(result.video_url).toBe(VALID_VIDEO_URL);
     expect(result.scale).toBe(2);
-    expect(result.sync).toBeUndefined();
   });
 
   it("scale=4 유효, model 포함", () => {
@@ -115,9 +115,8 @@ describe("VideoUpscaleSchema", () => {
     expect(r.model).toBe("RealESRGAN");
   });
 
-  it("sync=true 유효", () => {
-    const result = VideoUpscaleSchema.parse({ ...base, sync: true });
-    expect(result.sync).toBe(true);
+  it("sync 필드 거부 (async 전용)", () => {
+    expect(() => VideoUpscaleSchema.parse({ ...base, sync: true })).toThrow();
   });
 
   it("video_url 누락 시 에러", () => {

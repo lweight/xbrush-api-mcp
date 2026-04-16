@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll } from "vitest";
 import { createMockServer } from "./_helpers.js";
-import type { XBrushSyncResponse, XBrushAsyncResponse } from "../../src/types.js";
+import type { XBrushAsyncResponse } from "../../src/types.js";
 
 vi.mock("../../src/services/xbrush-client.js", async () => {
   const actual = await vi.importActual<typeof import("../../src/services/xbrush-client.js")>(
@@ -23,17 +23,6 @@ const mockAsync: XBrushAsyncResponse = {
   estimatedTimeout: 180,
 };
 
-const mockSync: XBrushSyncResponse = {
-  requestId: "req" + "m".repeat(21),
-  status: "completed",
-  domain: "video",
-  action: "lip-sync",
-  creditCharged: 5,
-  output: { videoUrl: "https://cdn.xbrush.ai/lip-synced.mp4" },
-  completedAt: "2026-04-16T00:00:00Z",
-  syncCompleted: true,
-};
-
 let handlers: Map<string, Function>;
 
 beforeAll(() => {
@@ -43,17 +32,17 @@ beforeAll(() => {
 });
 
 describe("xbrush_video_lip_sync", () => {
-  it("기본(async) — requestId 반환", async () => {
+  it("성공 — async 제출 + requestId 반환", async () => {
     mockedApi.mockResolvedValueOnce(mockAsync);
     const result = await handlers.get("xbrush_video_lip_sync")!({
       video_url: "https://a.com/v.mp4",
       audio_url: "https://a.com/a.mp3",
     });
-    expect(result.content[0].text).toContain("async");
+    expect(result.content[0].text).toContain("submitted (async)");
     expect(result.content[0].text).toContain(mockAsync.requestId);
   });
 
-  it("async — /v1/video/lip-sync 호출", async () => {
+  it("/v1/video/lip-sync (async 단일 경로)", async () => {
     mockedApi.mockResolvedValueOnce(mockAsync);
     await handlers.get("xbrush_video_lip_sync")!({
       video_url: "https://a.com/v.mp4",
@@ -61,20 +50,6 @@ describe("xbrush_video_lip_sync", () => {
     });
     const args = mockedApi.mock.calls.at(-1)![0] as any;
     expect(args.url).toBe("/v1/video/lip-sync");
-  });
-
-  it("sync=true — /v1/video/lip-sync/sync + videoUrl 결과 + video 타임아웃", async () => {
-    mockedApi.mockResolvedValueOnce(mockSync);
-    const result = await handlers.get("xbrush_video_lip_sync")!({
-      video_url: "https://a.com/v.mp4",
-      audio_url: "https://a.com/a.mp3",
-      sync: true,
-    });
-    expect(result.content[0].text).toContain("completed");
-    expect(result.content[0].text).toContain("lip-synced.mp4");
-    const args = mockedApi.mock.calls.at(-1)![0] as any;
-    expect(args.url).toBe("/v1/video/lip-sync/sync");
-    expect(args.timeout).toBe(600_000);
   });
 
   it("video_url/audio_url → videoUrl/audioUrl 매핑", async () => {

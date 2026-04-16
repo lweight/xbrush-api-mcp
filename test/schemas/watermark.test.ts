@@ -34,9 +34,9 @@ describe("WatermarkAddSchema", () => {
     ).toThrow();
   });
 
-  it("sync=false 유효", () => {
-    expect(
-      WatermarkAddSchema.parse({ image_url: IMG, sync: false }).sync
-    ).toBe(false);
+  it("sync 필드 거부 (async 전용)", () => {
+    expect(() =>
+      WatermarkAddSchema.parse({ image_url: IMG, sync: false })
+    ).toThrow();
   });
 });
