@@ -1,5 +1,39 @@
 # Changelog
 
+## 2.1.0 — 2026-05-26
+
+**Breaking changes:** None. All existing tool signatures and response formats are unchanged.
+
+Survey of the live `api.xbrush.run` (now 67 models across image/video/audio/**utility**) surfaced
+new endpoints and one display bug. This release adds the new low-risk tools and fixes the bug.
+
+### Added — 4 new tools (16 → 20)
+
+- `xbrush_video_extend` — extend an existing video by 1–20 seconds (e.g. `ltx-2.3-extend`, `pixverse-v6-extend`). Async.
+- `xbrush_video_retake` — regenerate a video variation up to a timestamp (`ltx-2.3-retake`). Async.
+- `xbrush_content_moderate` — NSFW moderation + masking for an image **or** video (routes to `/v1/image/moderate` or `/v1/video/moderate`). Async. Result includes a `flagged` verdict, an overall score, and a masked copy.
+- `xbrush_list_voices` — list TTS voices (`GET /v1/voice/list`), optionally filtered by `model`. Returns a compact id/name/category/preview summary for picking a `voice_id`.
+
+### Fixed
+
+- **`xbrush_list_models` credit rendering** — nested `creditConfig` shapes (resolution tiers, audio/noAudio, quality tiers used by veo3/kling-v3/seedream/nano-banana/gpt-image-2, etc.) rendered as `[object Object]`. Now expanded, e.g. `720p=audio 0.52/noAudio 0.26`.
+- `xbrush_list_models` `category` filter now accepts `"utility"` (new top-level category) in addition to image/video/audio.
+- `README.md` — corrected stale "sync default" documentation left over from the 2.0.0 async-only migration; tool list updated to 20.
+- `xbrush_get_request` now surfaces moderation results (`flagged`, moderation score) and falls back to `processedVideoUrl` when present.
+
+### Changed
+
+- `xbrush_image_edit` description clarifies that outpaint is performed by selecting an outpaint model (`flux-outpaint`, `qwen-outpaint`); `/v1/image/outpaint` does not exist. Stale `qwen-image-edit-re` example corrected to `qwen-image-edit`.
+
+### Notes
+
+- Model IDs remain `z.string()` — the 67 current models (nano-banana, seedream-4.5, veo3.1, kling-v3, etc.) work without a client upgrade.
+- `voice_clone` (`POST /v1/voice/clone`) and `lora_train` (`POST /v1/lora/train`) endpoints exist but are deferred to a later release pending consumption-side specs.
+
+### Tests
+
+- 243 → 278 unit + integration tests pass.
+
 ## 2.0.0 — 2026-04-16
 
 **Breaking changes:** All generation tools now use async-only flow. The `/sync` endpoints are no longer called.

@@ -24,13 +24,14 @@ export function registerAudioTools(server: McpServer): void {
     {
       title: "Generate Speech (TTS)",
       description: [
-        "Generate speech audio from text using an XBrush TTS model (e.g. speech-2.6-hd, eleven_v3).",
+        "Generate speech audio from text using an XBrush TTS model.",
+        "Minimax models (speech-2.6-hd, speech-2.8-hd, speech-2.8-turbo) REQUIRE a voice_id — get one from xbrush_list_voices. ElevenLabs (eleven-v3) works without a voice_id.",
         "Submits async — poll the returned request_id with xbrush_get_request.",
         "",
         "Args:",
         "  text (string, required): Text to speak.",
-        "  model (string, optional): TTS model ID. Server default if omitted.",
-        "  voice_id (string, optional): Voice selector (model-specific).",
+        "  model (string, optional): TTS model ID (e.g. eleven-v3, speech-2.8-hd). Default is Minimax (needs voice_id).",
+        "  voice_id (string, required for Minimax): a voice from xbrush_list_voices.",
         "  language (string, optional): Locale code (e.g. 'ko', 'en').",
         "  speed (float, optional): Speech rate (0.5-2.0). Default: 1.0.",
       ].join("\n"),

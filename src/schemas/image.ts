@@ -14,7 +14,7 @@ export const ImageGenerateSchema = z
 
 export const ImageEditSchema = z
   .object({
-    model: z.string().describe("Image editing model (e.g. qwen-image-edit-re, gemini-2.5-flash-edit)."),
+    model: z.string().describe("Editing model. Inpaint: qwen-image-edit, nano-banana-edit. Outpaint: flux-outpaint, qwen-outpaint. Use xbrush_list_models(category='image')."),
     prompt: z.string().trim().min(1).describe("Text instruction describing the desired edits."),
     image_url: z.string().url().describe("URL of the source image to edit."),
     n: z.number().int().min(1).max(8).optional().describe("Number of edited images (1-8). Default: 1."),
@@ -22,7 +22,7 @@ export const ImageEditSchema = z
     mode: z
       .enum(["inpaint", "outpaint"])
       .optional()
-      .describe("'inpaint' (default) edits the image in place; 'outpaint' extends the canvas using width/height."),
+      .describe("Optional hint ('inpaint'/'outpaint'). The selected model ultimately determines the operation — pick an outpaint model to outpaint."),
     width: z.number().int().min(256).max(4096).optional().describe("Output width in pixels (256-4096). For outpaint, the target canvas width."),
     height: z.number().int().min(256).max(4096).optional().describe("Output height in pixels (256-4096). For outpaint, the target canvas height."),
     seed: z.number().int().optional().describe("Random seed for reproducible results."),

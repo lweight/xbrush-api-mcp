@@ -93,6 +93,28 @@ describe("xbrush_get_request", () => {
     expect(result.content[0].text).toContain("request not found");
     expect(result.content[0].text).toContain("Suggestion");
   });
+
+  it("moderation output — flagged 판정 + 점수 + 마스킹 이미지", async () => {
+    mockedApi.mockResolvedValueOnce({
+      ...baseDetail,
+      domain: "image",
+      action: "moderate",
+      output: {
+        flagged: false,
+        overallScore: 0,
+        regionsMasked: 0,
+        imageUrls: ["https://cdn.xbrush.ai/moderation/out.png"],
+        processedImageUrl: "https://cdn.xbrush.ai/moderation/out.png",
+      },
+    });
+    const result = await handlers.get("xbrush_get_request")!({
+      request_id: baseDetail.requestId,
+    });
+    const text = result.content[0].text;
+    expect(text).toContain("Flagged: no");
+    expect(text).toContain("Moderation score: 0");
+    expect(text).toContain("https://cdn.xbrush.ai/moderation/out.png");
+  });
 });
 
 // ── xbrush_list_requests ─────────────────────────────────────────────

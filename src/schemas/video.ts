@@ -23,6 +23,33 @@ export const VideoUpscaleSchema = z
     model: z
       .string()
       .optional()
-      .describe("Upscale model ID (e.g. RealESRGAN, seedvr). Server default if omitted."),
+      .describe("Upscale model ID (e.g. realesrgan, seedvr). Server default if omitted."),
+  })
+  .strict();
+
+export const VideoExtendSchema = z
+  .object({
+    model: z
+      .string()
+      .describe("Video-extend model (e.g. ltx-2.3-extend, pixverse-v6-extend). Use xbrush_list_models(category='video') and pick a model whose featureType is 'extend'."),
+    video_url: z.string().url().describe("URL of the source video to extend."),
+    duration: z
+      .number()
+      .min(1)
+      .max(20)
+      .describe("Seconds of new video to append (1-20)."),
+  })
+  .strict();
+
+export const VideoRetakeSchema = z
+  .object({
+    model: z
+      .string()
+      .describe("Video-retake model (e.g. ltx-2.3-retake). Use xbrush_list_models(category='video') and pick a model whose featureType is 'retake'."),
+    video_url: z.string().url().describe("URL of the source video to retake."),
+    end_time: z
+      .number()
+      .min(0)
+      .describe("Timestamp in seconds (>= 0) up to which the video is regenerated into a new variation."),
   })
   .strict();

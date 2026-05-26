@@ -19,13 +19,13 @@ export const TtsGenerateSchema = z
       .string()
       .optional()
       .describe(
-        "TTS model ID (e.g. speech-2.6-hd, eleven_v3). Optional — server picks a default. Use xbrush_list_models with category='audio'."
+        "TTS model ID (e.g. eleven-v3, speech-2.8-hd). Optional — server default is a Minimax model (which needs voice_id). Use xbrush_list_models with category='audio'."
       ),
     text: NonBlankString.describe("Text to synthesize (non-blank)."),
     voice_id: z
       .string()
       .optional()
-      .describe("Voice identifier. See the model's supported voices."),
+      .describe("Voice identifier. REQUIRED for Minimax models (speech-*); get one from xbrush_list_voices. ElevenLabs (eleven-v3) works without it."),
     language: z
       .string()
       .optional()

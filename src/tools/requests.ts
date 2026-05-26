@@ -43,8 +43,15 @@ function formatRequestDetail(r: XBrushRequestDetail): string {
       });
     }
     if (r.output.videoUrl) lines.push(`- Video: ${r.output.videoUrl}`);
+    else if (typeof r.output.processedVideoUrl === "string")
+      lines.push(`- Video: ${r.output.processedVideoUrl}`);
     if (r.output.audioUrl) lines.push(`- Audio: ${r.output.audioUrl}`);
     if (r.output.url) lines.push(`- URL: ${r.output.url}`);
+    if (typeof r.output.flagged === "boolean") {
+      lines.push(`- Flagged: ${r.output.flagged ? "yes ⚠️" : "no"}`);
+      if (typeof r.output.overallScore === "number")
+        lines.push(`- Moderation score: ${r.output.overallScore}`);
+    }
   }
 
   if (r.status === "failed" && r.error) {

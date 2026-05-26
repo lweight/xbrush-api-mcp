@@ -146,3 +146,64 @@ describe("xbrush_video_upscale", () => {
     expect(result.content[0].text).toContain("upscale failed");
   });
 });
+
+// ── xbrush_video_extend ──────────────────────────────────────────────
+
+describe("xbrush_video_extend", () => {
+  it("성공 — async 제출 + camelCase 매핑", async () => {
+    mockedApi.mockResolvedValueOnce(mockVideoAsync);
+    const result = await handlers.get("xbrush_video_extend")!({
+      model: "ltx-2.3-extend",
+      video_url: "https://a.com/v.mp4",
+      duration: 5,
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.content[0].text).toContain("submitted (async)");
+    const args = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(args.url).toBe("/v1/video/extend");
+    expect(args.data).toEqual({
+      model: "ltx-2.3-extend",
+      videoUrl: "https://a.com/v.mp4",
+      duration: 5,
+    });
+  });
+
+  it("API 에러 → isError 결과", async () => {
+    mockedApi.mockRejectedValueOnce(new Error("extend failed"));
+    const result = await handlers.get("xbrush_video_extend")!({
+      model: "m",
+      video_url: "https://a.com/v.mp4",
+      duration: 5,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("extend failed");
+  });
+});
+
+// ── xbrush_video_retake ──────────────────────────────────────────────
+
+describe("xbrush_video_retake", () => {
+  it("성공 — async 제출 + end_time→endTime", async () => {
+    mockedApi.mockResolvedValueOnce(mockVideoAsync);
+    await handlers.get("xbrush_video_retake")!({
+      model: "ltx-2.3-retake",
+      video_url: "https://a.com/v.mp4",
+      end_time: 3,
+    });
+    const args = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(args.url).toBe("/v1/video/retake");
+    expect(args.data.endTime).toBe(3);
+    expect(args.data.videoUrl).toBe("https://a.com/v.mp4");
+  });
+
+  it("API 에러 → isError 결과", async () => {
+    mockedApi.mockRejectedValueOnce(new Error("retake failed"));
+    const result = await handlers.get("xbrush_video_retake")!({
+      model: "m",
+      video_url: "https://a.com/v.mp4",
+      end_time: 0,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("retake failed");
+  });
+});

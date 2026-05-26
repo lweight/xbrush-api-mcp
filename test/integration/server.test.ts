@@ -27,6 +27,8 @@ import { registerVideoTools } from "../../src/tools/video.js";
 import { registerAudioTools } from "../../src/tools/audio.js";
 import { registerLipSyncTools } from "../../src/tools/lip-sync.js";
 import { registerWatermarkTools } from "../../src/tools/watermark.js";
+import { registerModerationTools } from "../../src/tools/moderation.js";
+import { registerVoiceTools } from "../../src/tools/voice.js";
 import type { XBrushAsyncResponse } from "../../src/types.js";
 
 const mockedApi = vi.mocked(makeApiRequest);
@@ -54,8 +56,10 @@ beforeAll(async () => {
   registerAudioTools(mcpServer);
   registerLipSyncTools(mcpServer);
   registerWatermarkTools(mcpServer);
+  registerModerationTools(mcpServer);
   registerRequestTools(mcpServer);
   registerModelTools(mcpServer);
+  registerVoiceTools(mcpServer);
   registerFileUploadTools(mcpServer);
 
   client = new Client({ name: "test-client", version: "1.0" });
@@ -76,14 +80,15 @@ afterAll(async () => {
 // ── 도구 등록 검증 ───────────────────────────────────────────────────
 
 describe("도구 등록", () => {
-  it("도구 16개 등록", () => {
-    expect(tools).toHaveLength(16);
+  it("도구 20개 등록", () => {
+    expect(tools).toHaveLength(20);
   });
 
   it("도구 이름 목록 일치", () => {
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([
       "xbrush_check_health",
+      "xbrush_content_moderate",
       "xbrush_file_upload",
       "xbrush_get_request",
       "xbrush_image_edit",
@@ -92,11 +97,14 @@ describe("도구 등록", () => {
       "xbrush_image_upscale",
       "xbrush_list_models",
       "xbrush_list_requests",
+      "xbrush_list_voices",
       "xbrush_music_generate",
       "xbrush_sound_effect_generate",
       "xbrush_tts_generate",
+      "xbrush_video_extend",
       "xbrush_video_generate",
       "xbrush_video_lip_sync",
+      "xbrush_video_retake",
       "xbrush_video_upscale",
       "xbrush_watermark_add",
     ]);
@@ -116,6 +124,9 @@ describe("도구 등록", () => {
       "xbrush_music_generate",
       "xbrush_sound_effect_generate",
       "xbrush_video_lip_sync",
+      "xbrush_video_extend",
+      "xbrush_video_retake",
+      "xbrush_content_moderate",
       "xbrush_watermark_add",
     ];
     for (const name of generators) {

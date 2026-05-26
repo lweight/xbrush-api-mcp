@@ -91,4 +91,21 @@ describe("xbrush_list_models", () => {
     expect(text).toContain("720p=20");
     expect(text).toContain("1080p=40");
   });
+
+  it("중첩 creditConfig 포맷 — [object Object] 없이 펼침", async () => {
+    const resp: XBrushModelsResponse = {
+      models: [
+        makeModel({
+          creditInfo: {
+            creditConfig: { "720p": { audio: 0.52, noAudio: 0.26 } },
+          },
+        }),
+      ],
+    };
+    mockedApi.mockResolvedValueOnce(resp);
+    const result = await handlers.get("xbrush_list_models")!({});
+    const text = result.content[0].text;
+    expect(text).toContain("720p=audio 0.52/noAudio 0.26");
+    expect(text).not.toContain("[object Object]");
+  });
 });

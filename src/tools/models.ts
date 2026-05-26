@@ -14,12 +14,20 @@ import type { XBrushModelsResponse, XBrushModel } from "../types.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
+function formatCreditValue(v: number | Record<string, number>): string {
+  if (typeof v === "number") return String(v);
+  // Nested config (e.g. { audio: 0.52, noAudio: 0.26 } or quality tiers).
+  return Object.entries(v)
+    .map(([k, n]) => `${k} ${n}`)
+    .join("/");
+}
+
 function formatCredit(m: XBrushModel): string {
   const ci = m.creditInfo;
   if (ci.creditValue != null) return `${ci.creditValue} credits/${m.calType}`;
   if (ci.creditConfig) {
     return Object.entries(ci.creditConfig)
-      .map(([k, v]) => `${k}=${v}`)
+      .map(([k, v]) => `${k}=${formatCreditValue(v)}`)
       .join(", ");
   }
   return "—";
@@ -59,11 +67,11 @@ export function registerModelTools(server: McpServer): void {
       title: "List Models",
       description: [
         "List available XBrush AI models with pricing info.",
-        "Models span image generation/editing/upscale/remove-bg/outpaint, video (i2v/upscale/lipsync/extend/retake), and audio (TTS).",
-        "Music, sound-effect, and watermark endpoints have no dedicated model list — call them directly.",
+        "Models span image (generate/edit/upscale/remove-bg/outpaint/moderate), video (i2v/upscale/lipsync/extend/retake/moderate), audio (tts/music/sound-effect), and utility.",
+        "Watermark has no dedicated model list — call it directly.",
         "",
         "Args:",
-        "  category (string, optional): 'image', 'video', or 'audio'.",
+        "  category (string, optional): 'image', 'video', 'audio', or 'utility'.",
       ].join("\n"),
       inputSchema: ListModelsSchema,
       annotations: {

@@ -10,7 +10,7 @@
 
 ```
 src/
-├── index.ts              ← 서버 엔트리, 8개 도구 모듈 등록
+├── index.ts              ← 서버 엔트리, 10개 도구 모듈 등록
 ├── constants.ts          ← API 베이스 URL, 타임아웃 상수, 응답 크기 한도
 ├── types.ts              ← 공통 타입 정의
 ├── tool-filter.ts        ← XBRUSH_DISABLED_TOOLS 환경변수 처리
@@ -20,8 +20,10 @@ src/
 │   ├── image.ts
 │   ├── lip-sync.ts
 │   ├── models.ts
+│   ├── moderation.ts     ← content_moderate (image/video)
 │   ├── requests.ts
-│   ├── video.ts
+│   ├── video.ts          ← generate / upscale / extend / retake
+│   ├── voice.ts          ← list_voices
 │   └── watermark.ts
 ├── services/
 │   ├── dispatch.ts       ← submitAsync 헬퍼 (async 단일 경로)
@@ -33,8 +35,10 @@ src/
     ├── image.ts          ← generate, edit, upscale, remove_bg
     ├── lip-sync.ts       ← xbrush_video_lip_sync
     ├── models.ts         ← xbrush_list_models
+    ├── moderation.ts     ← xbrush_content_moderate
     ├── requests.ts       ← get_request, list_requests, check_health
-    ├── video.ts          ← video_generate, video_upscale
+    ├── video.ts          ← video_generate, video_upscale, video_extend, video_retake
+    ├── voice.ts          ← xbrush_list_voices
     └── watermark.ts      ← xbrush_watermark_add
 ```
 
@@ -86,11 +90,11 @@ npm test             # Vitest 전체 실행
 2. `src/tools/<domain>.ts` — `submitAsync` 헬퍼 사용 (async URL만 전달)
 3. `src/index.ts` — 새 모듈이면 `registerXxxTools(server)` 등록
 4. `test/schemas/<domain>.test.ts` + `test/tools/<domain>.test.ts` 추가
-5. `test/integration/server.test.ts`의 도구 개수/이름 목록 업데이트
+5. `test/integration/server.test.ts` + `test/integration/disabled-tools.test.ts`의 도구 개수/이름 목록 업데이트
 
 ## 테스트
 - **Vitest 4-tier**: `test/{schemas,services,tools,integration}/`
-- 현재 v2.0.0 기준 **243 케이스** 통과
+- 현재 v2.1.0 기준 **278 케이스** 통과
 - `npm test` / `npm run test:watch`
 - 통합 테스트는 axios mock 사용, 실 API 호출 없음
 - MCP Inspector 또는 Claude Code에서 수동 E2E
@@ -107,8 +111,9 @@ npm publish --access public
 ## 규칙
 - 커밋 메시지: 한국어
 - Transport: stdio 전용
-- 도구 16개 (Image 4, Video 3, Audio 3, Utility 6)
+- 도구 20개 (Image 4, Video 5, Audio 3, Utility 8)
   - Image: generate, edit, upscale, remove_bg
-  - Video: generate, upscale, lip_sync
+  - Video: generate, upscale, lip_sync, extend, retake
   - Audio: tts_generate, music_generate, sound_effect_generate
-  - Utility: watermark_add, list_models, get_request, list_requests, file_upload, check_health
+  - Utility: content_moderate, watermark_add, list_models, list_voices, get_request, list_requests, file_upload, check_health
+- 미구현(차기): `voice_clone`(/v1/voice/clone), `lora_train`(/v1/lora/train) — 소비측 스펙 확정 후

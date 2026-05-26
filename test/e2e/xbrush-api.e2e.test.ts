@@ -22,6 +22,8 @@ import { registerVideoTools } from "../../src/tools/video.js";
 import { registerAudioTools } from "../../src/tools/audio.js";
 import { registerLipSyncTools } from "../../src/tools/lip-sync.js";
 import { registerWatermarkTools } from "../../src/tools/watermark.js";
+import { registerModerationTools } from "../../src/tools/moderation.js";
+import { registerVoiceTools } from "../../src/tools/voice.js";
 
 const hasApiKey = !!process.env.XBRUSH_API_KEY;
 const paidOk = process.env.XBRUSH_E2E_PAID === "1";
@@ -38,8 +40,10 @@ beforeAll(async () => {
   registerAudioTools(server);
   registerLipSyncTools(server);
   registerWatermarkTools(server);
+  registerModerationTools(server);
   registerRequestTools(server);
   registerModelTools(server);
+  registerVoiceTools(server);
   registerFileUploadTools(server);
 
   client = new Client({ name: "e2e", version: "0" });
@@ -103,15 +107,19 @@ describe("api.xbrush.run — 서버 reachability (무료)", () => {
     expect(resp.status).toBe(401);
   });
 
-  it("12개 엔드포인트 경로 유효 (401 MISSING_API_KEY)", async () => {
+  it("16개 엔드포인트 경로 유효 (401 MISSING_API_KEY)", async () => {
     const paths = [
       "/v1/image/generate",
       "/v1/image/edit",
       "/v1/image/upscale",
       "/v1/image/remove-background",
+      "/v1/image/moderate",
       "/v1/video/generate",
       "/v1/video/upscale",
       "/v1/video/lip-sync",
+      "/v1/video/extend",
+      "/v1/video/retake",
+      "/v1/video/moderate",
       "/v1/tts/generate",
       "/v1/music/generate",
       "/v1/sound-effect/generate",
@@ -158,6 +166,12 @@ describe.runIf(hasApiKey)("MCP 도구 → 실 API (무과금)", () => {
     expect(r.isError).toBe(false);
     expect(r.text).toContain("# Requests");
   });
+
+  it("list_voices (기본 provider)", async () => {
+    const r = await callTool("xbrush_list_voices", {});
+    expect(r.isError).toBe(false);
+    expect(r.text).toContain("# Voices");
+  });
 });
 
 // ── Paid pipeline (XBRUSH_E2E_PAID=1) ─────────────────────────────────
@@ -170,7 +184,7 @@ describe.runIf(hasApiKey && paidOk)("유료 풀 파이프라인 (크레딧 소�
     audioUrl?: string;
   } = {};
 
-  it("01 image_generate (z-image-turbo, 512×512 sync)", async () => {
+  it("01 image_generate (z-image-turbo, async+poll)", async () => {
     const r = await callTool("xbrush_image_generate", {
       model: "z-image-turbo",
       prompt: "a single red apple on a white background, minimal, centered",
@@ -180,14 +194,18 @@ describe.runIf(hasApiKey && paidOk)("유료 풀 파이프라인 (크레딧 소�
     });
     if (r.isError) console.warn("image_generate:", r.text.slice(0, 300));
     expect(r.isError).toBe(false);
-    state.imageUrl = firstUrl(r.text) ?? undefined;
+    const reqId = extractRequestId(r.text);
+    expect(reqId).toBeTruthy();
+    const done = await pollUntilDone(reqId!, { maxMs: 3 * 60_000 });
+    expect(done.status).toBe("completed");
+    state.imageUrl = done.url;
     expect(state.imageUrl).toMatch(/^https:/);
   });
 
-  it("02 image_edit (qwen-image-edit-re, async+poll)", async () => {
+  it("02 image_edit (qwen-image-edit, async+poll)", async () => {
     if (!state.imageUrl) return;
     const r = await callTool("xbrush_image_edit", {
-      model: "qwen-image-edit-re",
+      model: "qwen-image-edit",
       prompt: "make the apple blue",
       image_url: state.imageUrl,
     });
@@ -211,20 +229,21 @@ describe.runIf(hasApiKey && paidOk)("유료 풀 파이프라인 (크레딧 소�
     expect(done.status).toBe("completed");
   });
 
-  it("04 image_remove_bg (remover, sync)", async () => {
+  it("04 image_remove_bg (remover, async+poll)", async () => {
     if (!state.imageUrl) return;
     const r = await callTool("xbrush_image_remove_bg", {
       image_url: state.imageUrl,
     });
     expect(r.isError).toBe(false);
-    expect(r.text).toMatch(/completed/i);
+    const reqId = extractRequestId(r.text);
+    const done = await pollUntilDone(reqId!, { maxMs: 3 * 60_000 });
+    expect(["completed", "timeout"]).toContain(done.status);
   });
 
   it("05 watermark_add (image, async+poll)", async () => {
     if (!state.imageUrl) return;
     const r = await callTool("xbrush_watermark_add", {
       image_url: state.imageUrl,
-      sync: false,
     });
     if (r.isError) console.warn("watermark:", r.text.slice(0, 200));
     expect(r.isError).toBe(false);
@@ -233,10 +252,11 @@ describe.runIf(hasApiKey && paidOk)("유료 풀 파이프라인 (크레딧 소�
     expect(["completed", "timeout"]).toContain(done.status);
   });
 
-  it("06 tts_generate (speech-2.6-hd, async+poll)", async () => {
+  it("06 tts_generate (eleven-v3, async+poll)", async () => {
+    // eleven-v3 (ElevenLabs) works without voice_id; Minimax (speech-*) requires one.
     const r = await callTool("xbrush_tts_generate", {
-      model: "speech-2.6-hd",
-      text: "안녕하세요, 라이트웨이트 테스트입니다.",
+      model: "eleven-v3",
+      text: "Hello, this is a Lightweight test.",
     });
     expect(r.isError).toBe(false);
     const reqId = extractRequestId(r.text);
@@ -275,12 +295,12 @@ describe.runIf(hasApiKey && paidOk)("유료 풀 파이프라인 (크레딧 소�
     expect(["completed", "timeout"]).toContain(done.status);
   });
 
-  it("09 video_upscale (RealESRGAN 2x, async+poll)", async () => {
+  it("09 video_upscale (realesrgan 2x, async+poll)", async () => {
     if (!state.videoUrl) return;
     const r = await callTool("xbrush_video_upscale", {
       video_url: state.videoUrl,
       scale: 2,
-      model: "RealESRGAN",
+      model: "realesrgan",
     });
     expect(r.isError).toBe(false);
     const reqId = extractRequestId(r.text);
@@ -300,13 +320,52 @@ describe.runIf(hasApiKey && paidOk)("유료 풀 파이프라인 (크레딧 소�
     expect(["completed", "timeout"]).toContain(done.status);
   });
 
-  it("11 video_lip_sync (pixverse, async+poll)", async () => {
+  it("11 video_lip_sync (pixverse-lipsync, async+poll)", async () => {
     if (!state.videoUrl || !state.audioUrl) return;
     const r = await callTool("xbrush_video_lip_sync", {
-      model: "pixverse",
+      model: "pixverse-lipsync",
       video_url: state.videoUrl,
       audio_url: state.audioUrl,
     });
+    expect(r.isError).toBe(false);
+    const reqId = extractRequestId(r.text);
+    const done = await pollUntilDone(reqId!, { maxMs: 10 * 60_000 });
+    expect(["completed", "timeout"]).toContain(done.status);
+  });
+
+  it("12 content_moderate (image, async+poll)", async () => {
+    if (!state.imageUrl) return;
+    const r = await callTool("xbrush_content_moderate", {
+      image_url: state.imageUrl,
+    });
+    expect(r.isError).toBe(false);
+    const reqId = extractRequestId(r.text);
+    const done = await pollUntilDone(reqId!, { maxMs: 3 * 60_000 });
+    expect(["completed", "timeout"]).toContain(done.status);
+  });
+
+  it("13 video_extend (ltx-2.3-extend, async+poll)", async () => {
+    if (!state.videoUrl) return;
+    const r = await callTool("xbrush_video_extend", {
+      model: "ltx-2.3-extend",
+      video_url: state.videoUrl,
+      duration: 5,
+    });
+    if (r.isError) console.warn("video_extend:", r.text.slice(0, 200));
+    expect(r.isError).toBe(false);
+    const reqId = extractRequestId(r.text);
+    const done = await pollUntilDone(reqId!, { maxMs: 10 * 60_000 });
+    expect(["completed", "timeout"]).toContain(done.status);
+  });
+
+  it("14 video_retake (ltx-2.3-retake, async+poll)", async () => {
+    if (!state.videoUrl) return;
+    const r = await callTool("xbrush_video_retake", {
+      model: "ltx-2.3-retake",
+      video_url: state.videoUrl,
+      end_time: 3,
+    });
+    if (r.isError) console.warn("video_retake:", r.text.slice(0, 200));
     expect(r.isError).toBe(false);
     const reqId = extractRequestId(r.text);
     const done = await pollUntilDone(reqId!, { maxMs: 10 * 60_000 });

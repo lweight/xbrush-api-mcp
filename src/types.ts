@@ -42,6 +42,12 @@ export interface XBrushOutput {
   audio_url?: string | null;
   mode?: string;
   duration?: number;
+  // Moderation outputs (/v1/image|video/moderate)
+  flagged?: boolean;
+  overallScore?: number;
+  regionsMasked?: number;
+  processedImageUrl?: string;
+  processedVideoUrl?: string;
   [key: string]: unknown;
 }
 
@@ -68,7 +74,9 @@ export interface XBrushModel {
   calType: string;
   creditInfo: {
     creditValue?: number;
-    creditConfig?: Record<string, number>;
+    // Flat (`{ "1K": 0.1 }`) or nested (`{ "720p": { audio: 0.5, noAudio: 0.2 } }`)
+    // — the server uses both shapes depending on calType.
+    creditConfig?: Record<string, number | Record<string, number>>;
   };
   constraints?: {
     max?: number;
@@ -106,4 +114,33 @@ export interface XBrushPresignResponse {
   fileKey: string;
   cdnUrl: string;
   expiresIn: number;
+}
+
+// ── Voice list (GET /v1/voice/list) ───────────────────────────────────
+
+export interface XBrushVoice {
+  voice_id: string;
+  name?: string;
+  category?: string;
+  description?: string | null;
+  preview_url?: string | null;
+  labels?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface XBrushVoiceListResponse {
+  success?: boolean;
+  provider?: string;
+  model?: string;
+  data?: {
+    provider?: string;
+    voices?: XBrushVoice[];
+    pagination?: {
+      page_size?: number;
+      next_page_token?: string | null;
+      has_more?: boolean;
+      returned_count?: number;
+      category?: string | null;
+    };
+  };
 }

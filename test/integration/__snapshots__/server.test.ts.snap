@@ -66,7 +66,7 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "type": "string",
     },
     "mode": {
-      "description": "'inpaint' (default) edits the image in place; 'outpaint' extends the canvas using width/height.",
+      "description": "Optional hint ('inpaint'/'outpaint'). The selected model ultimately determines the operation — pick an outpaint model to outpaint.",
       "enum": [
         "inpaint",
         "outpaint",
@@ -74,7 +74,7 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "type": "string",
     },
     "model": {
-      "description": "Image editing model (e.g. qwen-image-edit-re, gemini-2.5-flash-edit).",
+      "description": "Editing model. Inpaint: qwen-image-edit, nano-banana-edit. Outpaint: flux-outpaint, qwen-outpaint. Use xbrush_list_models(category='image').",
       "type": "string",
     },
     "n": {
@@ -163,11 +163,12 @@ exports[`도구 스키마 스냅샷 > xbrush_list_models 1`] = `
   "additionalProperties": false,
   "properties": {
     "category": {
-      "description": "Filter by top-level category (image, video, audio). Omit to list all.",
+      "description": "Filter by top-level category: image, video, audio, or utility. Omit to list all.",
       "enum": [
         "image",
         "video",
         "audio",
+        "utility",
       ],
       "type": "string",
     },
@@ -222,7 +223,7 @@ exports[`도구 스키마 스냅샷 > xbrush_tts_generate 1`] = `
       "type": "string",
     },
     "model": {
-      "description": "TTS model ID (e.g. speech-2.6-hd, eleven_v3). Optional — server picks a default. Use xbrush_list_models with category='audio'.",
+      "description": "TTS model ID (e.g. eleven-v3, speech-2.8-hd). Optional — server default is a Minimax model (which needs voice_id). Use xbrush_list_models with category='audio'.",
       "type": "string",
     },
     "speed": {
@@ -237,7 +238,7 @@ exports[`도구 스키마 스냅샷 > xbrush_tts_generate 1`] = `
       "type": "string",
     },
     "voice_id": {
-      "description": "Voice identifier. See the model's supported voices.",
+      "description": "Voice identifier. REQUIRED for Minimax models (speech-*); get one from xbrush_list_voices. ElevenLabs (eleven-v3) works without it.",
       "type": "string",
     },
   },

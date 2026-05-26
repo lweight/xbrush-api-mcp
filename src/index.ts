@@ -24,6 +24,8 @@ import { registerVideoTools } from "./tools/video.js";
 import { registerAudioTools } from "./tools/audio.js";
 import { registerLipSyncTools } from "./tools/lip-sync.js";
 import { registerWatermarkTools } from "./tools/watermark.js";
+import { registerModerationTools } from "./tools/moderation.js";
+import { registerVoiceTools } from "./tools/voice.js";
 import { applyDisableFilter, parseDisabledTools } from "./tool-filter.js";
 
 // ── Read version from package.json ────────────────────────────────────
@@ -54,12 +56,14 @@ const disabled = parseDisabledTools(process.env.XBRUSH_DISABLED_TOOLS);
 const reportUnmatched = applyDisableFilter(server, disabled);
 
 registerImageTools(server); // 4 tools: generate, edit, upscale, remove_bg
-registerVideoTools(server); // 2 tools: video_generate, video_upscale
+registerVideoTools(server); // 4 tools: video_generate, video_upscale, video_extend, video_retake
 registerAudioTools(server); // 3 tools: tts_generate, music_generate, sound_effect_generate
 registerLipSyncTools(server); // 1 tool:  video_lip_sync
 registerWatermarkTools(server); // 1 tool:  watermark_add
+registerModerationTools(server); // 1 tool:  content_moderate
 registerRequestTools(server); // 3 tools: get_request, list_requests, check_health
 registerModelTools(server); // 1 tool:  list_models
+registerVoiceTools(server); // 1 tool:  list_voices
 registerFileUploadTools(server); // 1 tool:  file_upload
 
 reportUnmatched();

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   VideoGenerateSchema,
   VideoUpscaleSchema,
+  VideoExtendSchema,
+  VideoRetakeSchema,
 } from "../../src/schemas/video.js";
 
 const VALID_URL = "https://assets.xbrush.ai/test.png";
@@ -146,5 +148,83 @@ describe("VideoUpscaleSchema", () => {
     expect(() =>
       VideoUpscaleSchema.parse({ ...base, resolution: "4k" })
     ).toThrow();
+  });
+});
+
+describe("VideoExtendSchema", () => {
+  const base = { model: "ltx-2.3-extend", video_url: VALID_VIDEO_URL, duration: 5 };
+
+  it("필수 필드 유효", () => {
+    const r = VideoExtendSchema.parse(base);
+    expect(r.model).toBe("ltx-2.3-extend");
+    expect(r.video_url).toBe(VALID_VIDEO_URL);
+    expect(r.duration).toBe(5);
+  });
+
+  it("model 누락 거부", () => {
+    expect(() =>
+      VideoExtendSchema.parse({ video_url: VALID_VIDEO_URL, duration: 5 })
+    ).toThrow();
+  });
+
+  it("video_url 누락 거부", () => {
+    expect(() => VideoExtendSchema.parse({ model: "m", duration: 5 })).toThrow();
+  });
+
+  it("duration 누락 거부", () => {
+    expect(() =>
+      VideoExtendSchema.parse({ model: "m", video_url: VALID_VIDEO_URL })
+    ).toThrow();
+  });
+
+  it("duration 범위(1-20) 밖 거부", () => {
+    expect(() => VideoExtendSchema.parse({ ...base, duration: 0 })).toThrow();
+    expect(() => VideoExtendSchema.parse({ ...base, duration: 21 })).toThrow();
+  });
+
+  it("video_url 비URL 거부", () => {
+    expect(() =>
+      VideoExtendSchema.parse({ ...base, video_url: "nope" })
+    ).toThrow();
+  });
+
+  it("미정의 필드 거부 (strict)", () => {
+    expect(() =>
+      VideoExtendSchema.parse({ ...base, prompt: "x" })
+    ).toThrow();
+  });
+});
+
+describe("VideoRetakeSchema", () => {
+  const base = { model: "ltx-2.3-retake", video_url: VALID_VIDEO_URL, end_time: 3 };
+
+  it("필수 필드 유효", () => {
+    const r = VideoRetakeSchema.parse(base);
+    expect(r.model).toBe("ltx-2.3-retake");
+    expect(r.end_time).toBe(3);
+  });
+
+  it("end_time=0 유효", () => {
+    expect(VideoRetakeSchema.parse({ ...base, end_time: 0 }).end_time).toBe(0);
+  });
+
+  it("end_time 음수 거부", () => {
+    expect(() => VideoRetakeSchema.parse({ ...base, end_time: -1 })).toThrow();
+  });
+
+  it("model/video_url/end_time 누락 거부", () => {
+    expect(() =>
+      VideoRetakeSchema.parse({ video_url: VALID_VIDEO_URL, end_time: 3 })
+    ).toThrow();
+    expect(() =>
+      VideoRetakeSchema.parse({ model: "m", end_time: 3 })
+    ).toThrow();
+    expect(() =>
+      VideoRetakeSchema.parse({ model: "m", video_url: VALID_VIDEO_URL })
+    ).toThrow();
+  });
+
+  it("미정의 필드 거부 (strict)", () => {
+    expect(() => VideoRetakeSchema.parse({ ...base, foo: 1 })).toThrow();
   });
 });
