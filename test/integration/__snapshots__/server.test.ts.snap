@@ -49,8 +49,13 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
   "properties": {
+    "aspect_ratio": {
+      "description": "Aspect ratio for resolution-based edit models. Examples: "1:1", "16:9", "9:16", "4:3", "3:4".",
+      "minLength": 1,
+      "type": "string",
+    },
     "height": {
-      "description": "Output height in pixels (256-4096). For outpaint, the target canvas height.",
+      "description": "Output height in pixels (256-4096) for megapixel-based models; for outpaint models, the target canvas height. NOT supported by resolution-based edit models (see width).",
       "maximum": 4096,
       "minimum": 256,
       "type": "integer",
@@ -88,12 +93,26 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "minLength": 1,
       "type": "string",
     },
+    "quality": {
+      "description": "Output quality tier. Applies to byResolutionAndQuality models (gpt-image-2-edit); higher = better and more expensive. Server default is high if omitted.",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+      ],
+      "type": "string",
+    },
+    "resolution": {
+      "description": "Output resolution tier for resolution-based edit models (gpt-image-2-edit, seedream-*-edit, nano-banana-pro/2-edit). Examples: "1K", "2K", "4K".",
+      "minLength": 1,
+      "type": "string",
+    },
     "seed": {
       "description": "Random seed for reproducible results.",
       "type": "integer",
     },
     "width": {
-      "description": "Output width in pixels (256-4096). For outpaint, the target canvas width.",
+      "description": "Output width in pixels (256-4096) for megapixel-based models; for outpaint models, the target canvas width. NOT supported by resolution-based edit models like gpt-image-2-edit / seedream-*-edit / nano-banana-pro-edit — use resolution/aspect_ratio for those.",
       "maximum": 4096,
       "minimum": 256,
       "type": "integer",
@@ -113,8 +132,13 @@ exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
   "properties": {
+    "aspect_ratio": {
+      "description": "Aspect ratio for resolution-based models. Examples: "1:1", "16:9", "9:16", "4:3", "3:4".",
+      "minLength": 1,
+      "type": "string",
+    },
     "height": {
-      "description": "Output height in pixels (256-4096). Default: 1024.",
+      "description": "Output height in pixels (256-4096) for megapixel-based models. Default: 1024. NOT supported by resolution-based models (see width).",
       "maximum": 4096,
       "minimum": 256,
       "type": "integer",
@@ -138,12 +162,26 @@ exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
       "minLength": 1,
       "type": "string",
     },
+    "quality": {
+      "description": "Output quality tier. Applies to byResolutionAndQuality models (gpt-image-2/-edit); higher = better and more expensive. Server default is high if omitted.",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+      ],
+      "type": "string",
+    },
+    "resolution": {
+      "description": "Output resolution tier for resolution-based models (gpt-image-2, seedream-*, nano-banana-pro/2). Examples: "1K", "2K", "4K". Ignored by megapixel-based models — use width/height for those.",
+      "minLength": 1,
+      "type": "string",
+    },
     "seed": {
       "description": "Random seed for reproducible results.",
       "type": "integer",
     },
     "width": {
-      "description": "Output width in pixels (256-4096). Default: 1024.",
+      "description": "Output width in pixels (256-4096) for megapixel-based models (flux.*, z-image-turbo, etc.). Default: 1024. NOT supported by resolution-based models like gpt-image-2 / seedream-* / nano-banana-pro — use resolution/aspect_ratio for those.",
       "maximum": 4096,
       "minimum": 256,
       "type": "integer",

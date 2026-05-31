@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.2.0 — 2026-05-31
+
+**Breaking changes:** None for megapixel-based models. Resolution-based image models now **reject** `width`/`height` with a guidance error instead of silently dropping them — those inputs never affected these models anyway (verified: a 1280×768 request to `gpt-image-2` returned 1024×1024, and `width`/`height` were absent from the model-facing payload).
+
+Investigation of `gpt-image-2` showed XBrush image models split by `calType`: `perMegapixel`/`perImage` models size output by `width`/`height`, while `byResolution`/`byResolutionAndQuality` models (`gpt-image-2`, `seedream-4.x`, `nano-banana-pro`, `nano-banana-2` and their `-edit` variants) size by a resolution tier + aspect ratio and ignore `width`/`height`.
+
+### Added
+
+- `xbrush_image_generate` / `xbrush_image_edit` — three new optional inputs for resolution-based models:
+  - `resolution` (string, e.g. `"1K"`/`"2K"`/`"4K"`) — output resolution tier.
+  - `aspect_ratio` (string, e.g. `"1:1"`/`"16:9"`) — output aspect ratio (verified: `aspect_ratio:"16:9"` produced a 1280×720 image).
+  - `quality` (`low`/`medium`/`high`) — quality tier for `gpt-image-2`/`-edit` (byResolutionAndQuality). Verified: `quality:"low"` costs 0.0078 credits vs. the server default `high` at 0.2743 (~35× cheaper).
+
+### Changed
+
+- Resolution-based image models (`gpt-image-2`, `seedream-4.0/4.5`, `nano-banana-pro`, `nano-banana-2` and `-edit` variants) now reject `width`/`height` up front with a hint to use `resolution`/`aspect_ratio`. Megapixel-based models (`flux.*`, `z-image-turbo`, `qwen-image-edit`, ...) are unaffected and continue to use `width`/`height`.
+- `width`/`height` descriptions updated to note they apply only to megapixel-based models.
+
+### Tests
+
+- 278 → 290 unit + integration tests pass.
+
 ## 2.1.0 — 2026-05-26
 
 **Breaking changes:** None. All existing tool signatures and response formats are unchanged.

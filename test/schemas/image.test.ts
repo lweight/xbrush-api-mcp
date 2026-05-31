@@ -31,6 +31,26 @@ describe("ImageGenerateSchema", () => {
     expect(result.seed).toBe(42);
   });
 
+  it("resolution/aspect_ratio/quality 유효", () => {
+    const result = ImageGenerateSchema.parse({
+      ...base,
+      resolution: "2K",
+      aspect_ratio: "16:9",
+      quality: "high",
+    });
+    expect(result.resolution).toBe("2K");
+    expect(result.aspect_ratio).toBe("16:9");
+    expect(result.quality).toBe("high");
+  });
+
+  it("quality 잘못된 값 거부", () => {
+    expect(() => ImageGenerateSchema.parse({ ...base, quality: "ultra" })).toThrow();
+  });
+
+  it("resolution 빈 문자열 거부", () => {
+    expect(() => ImageGenerateSchema.parse({ ...base, resolution: "" })).toThrow();
+  });
+
   it("prompt 누락 시 에러", () => {
     expect(() => ImageGenerateSchema.parse({ model: "x" })).toThrow();
   });
@@ -92,6 +112,22 @@ describe("ImageEditSchema", () => {
       seed: 7,
     });
     expect(result.n).toBe(2);
+  });
+
+  it("resolution/aspect_ratio/quality 유효", () => {
+    const result = ImageEditSchema.parse({
+      ...base,
+      resolution: "1K",
+      aspect_ratio: "1:1",
+      quality: "medium",
+    });
+    expect(result.resolution).toBe("1K");
+    expect(result.aspect_ratio).toBe("1:1");
+    expect(result.quality).toBe("medium");
+  });
+
+  it("quality 잘못된 값 거부", () => {
+    expect(() => ImageEditSchema.parse({ ...base, quality: "best" })).toThrow();
   });
 
   it("sync 필드 거부 (async 전용)", () => {

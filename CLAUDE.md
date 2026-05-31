@@ -76,6 +76,13 @@ npm test             # Vitest 전체 실행
 - 모든 도구 호출 → `request_id` 반환 → `xbrush_get_request(request_id)`로 폴링.
 - 스키마에 `sync` 필드 없음. 전달 시 strict 모드로 거부됨.
 
+## 이미지 크기 지정 (모델 calType별, 중요)
+- 이미지 모델은 `calType`에 따라 출력 크기 지정 방식이 다름:
+  - **`perMegapixel` / `perImage`** (`flux.*`, `z-image-turbo`, `qwen-image-edit` 등) → `width`/`height` 사용.
+  - **`byResolution` / `byResolutionAndQuality`** (`gpt-image-2`, `seedream-4.0/4.5`, `nano-banana-pro`, `nano-banana-2` + 각 `-edit`) → `resolution`(예: `"1K"`/`"2K"`/`"4K"`) + `aspect_ratio`(예: `"16:9"`) 사용. **`width`/`height`는 무시됨** (서버가 모델 전달 전 드롭 — 실측 확인).
+  - `gpt-image-2`/`-edit`(byResolutionAndQuality)만 `quality`(low/medium/high) 추가 지원. 미지정 시 서버 기본은 `high`(최고가).
+- `src/tools/image.ts`의 `RESOLUTION_BASED_MODELS`가 해상도 기반 모델에 `width`/`height`가 오면 제출 전 거부(런타임 가드). 새 byResolution 모델 추가 시 이 상수를 `xbrush_list_models`의 calType과 맞춰 갱신.
+
 ## 파일 업로드 플로우
 `xbrush_file_upload`에 `strategy` 파라미터로 경로 선택:
 
@@ -94,7 +101,7 @@ npm test             # Vitest 전체 실행
 
 ## 테스트
 - **Vitest 4-tier**: `test/{schemas,services,tools,integration}/`
-- 현재 v2.1.0 기준 **278 케이스** 통과
+- 현재 v2.2.0 기준 **290 케이스** 통과
 - `npm test` / `npm run test:watch`
 - 통합 테스트는 axios mock 사용, 실 API 호출 없음
 - MCP Inspector 또는 Claude Code에서 수동 E2E
