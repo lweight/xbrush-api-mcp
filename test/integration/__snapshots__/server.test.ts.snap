@@ -61,9 +61,19 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "type": "integer",
     },
     "image_url": {
-      "description": "URL of the source image to edit.",
+      "description": "URL of the primary source image to edit (also the first reference).",
       "format": "uri",
       "type": "string",
+    },
+    "image_urls": {
+      "description": "Additional reference image URLs for models that compose from multiple references (e.g. gpt-image-2-edit, nano-banana-edit). Appended after image_url, so the model receives [image_url, ...image_urls]. Omit for single-reference edits.",
+      "items": {
+        "format": "uri",
+        "type": "string",
+      },
+      "maxItems": 15,
+      "minItems": 1,
+      "type": "array",
     },
     "mask_url": {
       "description": "Mask image URL. White areas = edit, black areas = preserve.",

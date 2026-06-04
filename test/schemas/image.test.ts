@@ -130,6 +130,22 @@ describe("ImageEditSchema", () => {
     expect(() => ImageEditSchema.parse({ ...base, quality: "best" })).toThrow();
   });
 
+  it("image_urls 추가 레퍼런스 배열 유효", () => {
+    const refs = ["https://a.com/1.png", "https://a.com/2.png"];
+    const result = ImageEditSchema.parse({ ...base, image_urls: refs });
+    expect(result.image_urls).toEqual(refs);
+  });
+
+  it("image_urls 내 잘못된 URL 거부", () => {
+    expect(() =>
+      ImageEditSchema.parse({ ...base, image_urls: ["https://a.com/1.png", "nope"] })
+    ).toThrow();
+  });
+
+  it("image_urls 빈 배열 거부", () => {
+    expect(() => ImageEditSchema.parse({ ...base, image_urls: [] })).toThrow();
+  });
+
   it("sync 필드 거부 (async 전용)", () => {
     expect(() => ImageEditSchema.parse({ ...base, sync: true })).toThrow();
   });

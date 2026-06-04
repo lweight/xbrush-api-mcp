@@ -137,7 +137,8 @@ export function registerImageTools(server: McpServer): void {
         "Args:",
         "  model (string, required): Inpaint: qwen-image-edit, nano-banana-edit, seedream-4.5-edit. Outpaint: flux-outpaint, qwen-outpaint. See xbrush_list_models(category='image').",
         "  prompt (string, required): Text instruction for the edit.",
-        "  image_url (string, required): URL of the source image.",
+        "  image_url (string, required): URL of the primary source image (also the first reference).",
+        "  image_urls (string[], optional): Additional reference image URLs for multi-reference models (gpt-image-2-edit, nano-banana-edit). Model receives [image_url, ...image_urls].",
         "  n (int, optional): Number of results (1-8). Default: 1.",
         "  mask_url (string, optional): Mask image URL (white=edit, black=preserve).",
         "  mode (string, optional): Hint 'inpaint'/'outpaint'; the chosen model determines the actual operation.",
@@ -149,6 +150,7 @@ export function registerImageTools(server: McpServer): void {
         "  seed (int, optional): Random seed.",
         "",
         "Note: resolution-based edit models (gpt-image-2-edit, seedream-*-edit, nano-banana-pro/2-edit) ignore width/height — passing them returns an error; use resolution/aspect_ratio instead.",
+        "Note: to give multiple reference images (e.g. compose two subjects with gpt-image-2-edit), put the primary in image_url and the rest in image_urls.",
       ].join("\n"),
       inputSchema: ImageEditSchema,
       annotations: {
@@ -167,6 +169,7 @@ export function registerImageTools(server: McpServer): void {
         prompt: args.prompt,
         imageUrl: args.image_url,
       };
+      if (args.image_urls !== undefined) body.imageUrls = args.image_urls;
       if (args.n !== undefined) body.n = args.n;
       if (args.mask_url !== undefined) body.maskUrl = args.mask_url;
       if (args.mode !== undefined) body.mode = args.mode;

@@ -83,6 +83,11 @@ npm test             # Vitest 전체 실행
   - `gpt-image-2`/`-edit`(byResolutionAndQuality)만 `quality`(low/medium/high) 추가 지원. 미지정 시 서버 기본은 `high`(최고가).
 - `src/tools/image.ts`의 `RESOLUTION_BASED_MODELS`가 해상도 기반 모델에 `width`/`height`가 오면 제출 전 거부(런타임 가드). 새 byResolution 모델 추가 시 이 상수를 `xbrush_list_models`의 calType과 맞춰 갱신.
 
+## 다중 레퍼런스 이미지 (image edit, 중요)
+- `/v1/image/edit`는 **단일 `imageUrl`(필수, primary) + `imageUrls`(선택, 추가 레퍼런스 배열)** 을 받음. 서버가 `[imageUrl, ...imageUrls]`로 중복 제거 후 모델엔 `images` 배열로 전달 (실측 확인: `gpt-image-2-edit`에 노란 원 `imageUrl` + 초록 삼각형 `imageUrls` → 두 도형이 합쳐진 1장 반환).
+- `xbrush_image_edit` 스키마의 `image_urls`가 `imageUrls`로 매핑됨. `imageUrls`만 보내고 `imageUrl`을 빠뜨리면 422(`imageUrl` 필수).
+- 주의: 무과금 역추적 시 잘못된 모델명 게이트(`__nope__`)를 쓰면 이미지 처리 단계 전 `INVALID_MODEL`로 끊겨 `imageUrls` 소비 여부를 못 봄 — 다중 레퍼런스류는 유효 모델로 최저가 티어(예: `resolution:"1K", quality:"low"`) 실호출로 검증할 것.
+
 ## 파일 업로드 플로우
 `xbrush_file_upload`에 `strategy` 파라미터로 경로 선택:
 

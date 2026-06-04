@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.3.0 — 2026-06-03
+
+**Breaking changes:** None. `image_url` stays required; the new field is optional and additive.
+
+Bug report: `gpt-image-2` (and other multi-reference models) couldn't accept two or more reference images through `xbrush_image_edit`. Root cause was an MCP-layer omission — the tool exposed only a single `image_url`, while the XBrush API `/v1/image/edit` accepts `imageUrl` (primary) **plus** `imageUrls` (an array of additional references) and passes them all to the model as `images`. Verified live against `gpt-image-2-edit`: a request with a yellow-circle `imageUrl` + a green-triangle `imageUrls` entry returned a single image containing **both** shapes.
+
+### Added
+
+- `xbrush_image_edit` — new optional `image_urls` (string[], 1–15) input for multi-reference models (`gpt-image-2-edit`, `nano-banana-edit`, ...). The model receives `[image_url, ...image_urls]`. Maps to the API's `imageUrls` field; omit it for single-reference edits.
+
+### Tests
+
+- 290 → 295 unit + integration tests pass.
+
 ## 2.2.0 — 2026-05-31
 
 **Breaking changes:** None for megapixel-based models. Resolution-based image models now **reject** `width`/`height` with a guidance error instead of silently dropping them — those inputs never affected these models anyway (verified: a 1280×768 request to `gpt-image-2` returned 1024×1024, and `width`/`height` were absent from the model-facing payload).

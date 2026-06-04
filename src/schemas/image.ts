@@ -19,7 +19,17 @@ export const ImageEditSchema = z
   .object({
     model: z.string().describe("Editing model. Inpaint: qwen-image-edit, nano-banana-edit. Outpaint: flux-outpaint, qwen-outpaint. Use xbrush_list_models(category='image')."),
     prompt: z.string().trim().min(1).describe("Text instruction describing the desired edits."),
-    image_url: z.string().url().describe("URL of the source image to edit."),
+    image_url: z.string().url().describe("URL of the primary source image to edit (also the first reference)."),
+    image_urls: z
+      .array(z.string().url())
+      .min(1)
+      .max(15)
+      .optional()
+      .describe(
+        "Additional reference image URLs for models that compose from multiple references " +
+          "(e.g. gpt-image-2-edit, nano-banana-edit). Appended after image_url, so the model receives " +
+          "[image_url, ...image_urls]. Omit for single-reference edits."
+      ),
     n: z.number().int().min(1).max(8).optional().describe("Number of edited images (1-8). Default: 1."),
     mask_url: z.string().url().optional().describe("Mask image URL. White areas = edit, black areas = preserve."),
     mode: z

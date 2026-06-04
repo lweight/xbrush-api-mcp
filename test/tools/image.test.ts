@@ -180,6 +180,35 @@ describe("xbrush_image_edit", () => {
     expect(callArgs.data.maskUrl).toBe("https://a.com/m.png");
   });
 
+  it("image_urls → imageUrls 매핑 (다중 레퍼런스)", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    await handlers.get("xbrush_image_edit")!({
+      model: "gpt-image-2-edit",
+      prompt: "combine references",
+      image_url: "https://a.com/primary.png",
+      image_urls: ["https://a.com/ref2.png", "https://a.com/ref3.png"],
+      resolution: "1K",
+      aspect_ratio: "1:1",
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.data.imageUrl).toBe("https://a.com/primary.png");
+    expect(callArgs.data.imageUrls).toEqual([
+      "https://a.com/ref2.png",
+      "https://a.com/ref3.png",
+    ]);
+  });
+
+  it("image_urls 미지정 → body에 imageUrls 없음", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    await handlers.get("xbrush_image_edit")!({
+      model: "m",
+      prompt: "p",
+      image_url: "https://a.com/i.png",
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect("imageUrls" in callArgs.data).toBe(false);
+  });
+
   it("mode=outpaint → body.mode 포함", async () => {
     mockedApi.mockResolvedValueOnce(mockAsync);
     await handlers.get("xbrush_image_edit")!({
