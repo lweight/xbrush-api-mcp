@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.3.1 — 2026-06-10
+
+**Breaking changes:** None. Schema and runtime behavior are unchanged — `aspect_ratio` stays a free-form string. This release only expands the field's `description` so the calling model picks from the full set of supported ratios.
+
+A live probe of `gpt-image-2`/`-edit` on `api.xbrush.run` surfaced more aspect ratios than the previous describe text listed. The server validates `aspect_ratio` per resolution and returns the allowed list on an unsupported value (1K/2K reject during processing → `failed` + refund; 4K rejects at submit → `400 VALIDATION_ERROR`). Measured 1K output sizes: 1:1→1024×1024, 16:9→1280×720, 9:16→720×1280, 4:3→1152×864, 3:4→864×1152, 3:2→1248×832, 2:3→832×1248, 21:9→1456×624, 4:5→896×1120.
+
+### Changed
+
+- `xbrush_image_generate` / `xbrush_image_edit` — the `aspect_ratio` description now lists the full `gpt-image-2`/`-edit` support set:
+  - **1K / 2K:** `1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1` (10 ratios)
+  - **4K:** `16:9, 9:16, 21:9, 1.91:1` (4 ratios, wide only)
+  - Previously only `1:1, 16:9, 9:16, 4:3, 3:4` were shown — `3:2, 2:3, 4:5, 21:9, 1.91:1` were missing.
+- No client-side whitelist guard was added: the supported set varies by model, resolution and over time, and the server already rejects unsupported values with the allowed list — a hardcoded guard would risk false rejections. Guidance lives in the describe text only.
+
+### Tests
+
+- 295 unit + integration tests pass (the snapshot for the two updated descriptions was refreshed).
+
 ## 2.3.0 — 2026-06-03
 
 **Breaking changes:** None. `image_url` stays required; the new field is optional and additive.

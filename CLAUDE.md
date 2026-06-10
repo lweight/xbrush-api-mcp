@@ -82,6 +82,7 @@ npm test             # Vitest 전체 실행
   - **`byResolution` / `byResolutionAndQuality`** (`gpt-image-2`, `seedream-4.0/4.5`, `nano-banana-pro`, `nano-banana-2` + 각 `-edit`) → `resolution`(예: `"1K"`/`"2K"`/`"4K"`) + `aspect_ratio`(예: `"16:9"`) 사용. **`width`/`height`는 무시됨** (서버가 모델 전달 전 드롭 — 실측 확인).
   - `gpt-image-2`/`-edit`(byResolutionAndQuality)만 `quality`(low/medium/high) 추가 지원. 미지정 시 서버 기본은 `high`(최고가).
 - `src/tools/image.ts`의 `RESOLUTION_BASED_MODELS`가 해상도 기반 모델에 `width`/`height`가 오면 제출 전 거부(런타임 가드). 새 byResolution 모델 추가 시 이 상수를 `xbrush_list_models`의 calType과 맞춰 갱신.
+- **`gpt-image-2`/`-edit`가 받는 `aspect_ratio`** (2026-06 실측): `1K`/`2K`는 `1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1`(10종), `4K`는 `16:9, 9:16, 21:9, 1.91:1`(4종, wide만). 미지원 값 거부 방식이 해상도별로 다름 — `1K`/`2K`는 제출 `202` 후 처리 중 `failed`(과금되나 환불됨), `4K`는 제출 즉시 `400 VALIDATION_ERROR`. 서버 에러 메시지가 허용 목록을 그대로 반환하므로 새 비율은 미지원 값 1회 실호출로 역추적 가능. `aspect_ratio`/`resolution`은 free-form string으로 서버 미검증 통과(`quality`만 enum 검증)이고 모델·해상도·시점별로 목록이 달라 **클라이언트 화이트리스트 가드는 두지 않음**(false-rejection 위험) — describe로만 안내.
 
 ## 다중 레퍼런스 이미지 (image edit, 중요)
 - `/v1/image/edit`는 **단일 `imageUrl`(필수, primary) + `imageUrls`(선택, 추가 레퍼런스 배열)** 을 받음. 서버가 `[imageUrl, ...imageUrls]`로 중복 제거 후 모델엔 `images` 배열로 전달 (실측 확인: `gpt-image-2-edit`에 노란 원 `imageUrl` + 초록 삼각형 `imageUrls` → 두 도형이 합쳐진 1장 반환).

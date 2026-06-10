@@ -9,7 +9,7 @@ export const ImageGenerateSchema = z
     width: z.number().int().min(256).max(4096).optional().describe("Output width in pixels (256-4096) for megapixel-based models (flux.*, z-image-turbo, etc.). Default: 1024. NOT supported by resolution-based models like gpt-image-2 / seedream-* / nano-banana-pro — use resolution/aspect_ratio for those."),
     height: z.number().int().min(256).max(4096).optional().describe("Output height in pixels (256-4096) for megapixel-based models. Default: 1024. NOT supported by resolution-based models (see width)."),
     resolution: z.string().trim().min(1).optional().describe("Output resolution tier for resolution-based models (gpt-image-2, seedream-*, nano-banana-pro/2). Examples: \"1K\", \"2K\", \"4K\". Ignored by megapixel-based models — use width/height for those."),
-    aspect_ratio: z.string().trim().min(1).optional().describe("Aspect ratio for resolution-based models. Examples: \"1:1\", \"16:9\", \"9:16\", \"4:3\", \"3:4\"."),
+    aspect_ratio: z.string().trim().min(1).optional().describe("Aspect ratio for resolution-based models (e.g. \"16:9\"). gpt-image-2/-edit support 1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1 at 1K/2K — at 4K only 16:9, 9:16, 21:9, 1.91:1. seedream-* / nano-banana-* accept their own sets; an unsupported value is rejected with the list of allowed ratios."),
     quality: z.enum(["low", "medium", "high"]).optional().describe("Output quality tier. Applies to byResolutionAndQuality models (gpt-image-2/-edit); higher = better and more expensive. Server default is high if omitted."),
     seed: z.number().int().optional().describe("Random seed for reproducible results."),
   })
@@ -39,7 +39,7 @@ export const ImageEditSchema = z
     width: z.number().int().min(256).max(4096).optional().describe("Output width in pixels (256-4096) for megapixel-based models; for outpaint models, the target canvas width. NOT supported by resolution-based edit models like gpt-image-2-edit / seedream-*-edit / nano-banana-pro-edit — use resolution/aspect_ratio for those."),
     height: z.number().int().min(256).max(4096).optional().describe("Output height in pixels (256-4096) for megapixel-based models; for outpaint models, the target canvas height. NOT supported by resolution-based edit models (see width)."),
     resolution: z.string().trim().min(1).optional().describe("Output resolution tier for resolution-based edit models (gpt-image-2-edit, seedream-*-edit, nano-banana-pro/2-edit). Examples: \"1K\", \"2K\", \"4K\"."),
-    aspect_ratio: z.string().trim().min(1).optional().describe("Aspect ratio for resolution-based edit models. Examples: \"1:1\", \"16:9\", \"9:16\", \"4:3\", \"3:4\"."),
+    aspect_ratio: z.string().trim().min(1).optional().describe("Aspect ratio for resolution-based edit models (e.g. \"16:9\"). gpt-image-2-edit supports 1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1 at 1K/2K — at 4K only 16:9, 9:16, 21:9, 1.91:1. seedream-*-edit / nano-banana-*-edit accept their own sets; an unsupported value is rejected with the list of allowed ratios."),
     quality: z.enum(["low", "medium", "high"]).optional().describe("Output quality tier. Applies to byResolutionAndQuality models (gpt-image-2-edit); higher = better and more expensive. Server default is high if omitted."),
     seed: z.number().int().optional().describe("Random seed for reproducible results."),
   })
