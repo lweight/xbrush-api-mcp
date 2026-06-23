@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.4.0 — 2026-06-23
+
+**Breaking changes:** None. Existing `resolution`/`aspect_ratio` sizing is unchanged; this only adds an escape hatch and relaxes the width/height guard for that one case.
+
+`gpt-image-2`/`-edit` can now take an exact output size. The XBrush server gained a `custom` aspect ratio: sending `aspect_ratio:"custom"` **together with** `width`/`height` makes the model emit exactly those pixels (the resolution/aspect_ratio tiers are bypassed). Verified live on `api.xbrush.run`: `{width:1024,height:1152,aspect_ratio:"custom"}` → 1024×1152 and `{1536,864}` → 1536×864, with `width`/`height` passed straight through in the model payload. `width` **and** `height` are both required and each must be a multiple of 16, with longest edge ≤3840 and total pixels 655,360–8,294,400 — out-of-range or `"custom"` alone returns `400` at submit (no charge, with a precise constraint message). Cost is billed at the resolution tier (1K when unspecified).
+
+Until now the runtime guard rejected any `width`/`height` sent to a resolution-based model; it now lets them through when `aspect_ratio:"custom"`. Exact-pixel `custom` is reliable only on `gpt-image-2`/`-edit`: `seedream-4.5` keeps only the ratio and rescales to ~2K (1024×1152 → 1824×2048), and `nano-banana-pro` ignores width/height entirely (→ 2048×2048, and pricier). So the guard passes `custom` through for any model, but the per-model difference is documented in the describe text rather than enforced (same anti-false-rejection stance as `aspect_ratio`).
+
+### Added
+
+- `xbrush_image_generate` / `xbrush_image_edit` — `aspect_ratio:"custom"` + `width`/`height` now requests an exact pixel size on `gpt-image-2`/`-edit` (e.g. `width:1024,height:1152,aspect_ratio:"custom"` → 1024×1152). The width/height guard (`rejectWidthHeightForResolutionModel`) skips its rejection when `aspect_ratio==="custom"`; the `width`/`height`/`aspect_ratio` describe text now documents the custom mode and the per-model caveats.
+
+### Tests
+
+- 295 → 297 unit + integration tests pass (added a `custom` pass-through case for generate and edit; refreshed the two description snapshots).
+
 ## 2.3.1 — 2026-06-10
 
 **Breaking changes:** None. Schema and runtime behavior are unchanged — `aspect_ratio` stays a free-form string. This release only expands the field's `description` so the calling model picks from the full set of supported ratios.

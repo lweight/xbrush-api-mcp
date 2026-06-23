@@ -79,10 +79,11 @@ npm test             # Vitest 전체 실행
 ## 이미지 크기 지정 (모델 calType별, 중요)
 - 이미지 모델은 `calType`에 따라 출력 크기 지정 방식이 다름:
   - **`perMegapixel` / `perImage`** (`flux.*`, `z-image-turbo`, `qwen-image-edit` 등) → `width`/`height` 사용.
-  - **`byResolution` / `byResolutionAndQuality`** (`gpt-image-2`, `seedream-4.0/4.5`, `nano-banana-pro`, `nano-banana-2` + 각 `-edit`) → `resolution`(예: `"1K"`/`"2K"`/`"4K"`) + `aspect_ratio`(예: `"16:9"`) 사용. **`width`/`height`는 무시됨** (서버가 모델 전달 전 드롭 — 실측 확인).
+  - **`byResolution` / `byResolutionAndQuality`** (`gpt-image-2`, `seedream-4.0/4.5`, `nano-banana-pro`, `nano-banana-2` + 각 `-edit`) → `resolution`(예: `"1K"`/`"2K"`/`"4K"`) + `aspect_ratio`(예: `"16:9"`) 사용. **`width`/`height`는 무시됨** (서버가 모델 전달 전 드롭 — 실측 확인). **단 `aspect_ratio:"custom"`이면 예외** — 아래 "임의 픽셀 사이즈(custom)" 참고.
   - `gpt-image-2`/`-edit`(byResolutionAndQuality)만 `quality`(low/medium/high) 추가 지원. 미지정 시 서버 기본은 `high`(최고가).
-- `src/tools/image.ts`의 `RESOLUTION_BASED_MODELS`가 해상도 기반 모델에 `width`/`height`가 오면 제출 전 거부(런타임 가드). 새 byResolution 모델 추가 시 이 상수를 `xbrush_list_models`의 calType과 맞춰 갱신.
+- `src/tools/image.ts`의 `RESOLUTION_BASED_MODELS`가 해상도 기반 모델에 `width`/`height`가 오면 제출 전 거부(런타임 가드). **예외: `aspect_ratio==="custom"`이면 통과**(임의 픽셀 사이즈 모드). 새 byResolution 모델 추가 시 이 상수를 `xbrush_list_models`의 calType과 맞춰 갱신.
 - **`gpt-image-2`/`-edit`가 받는 `aspect_ratio`** (2026-06 실측): `1K`/`2K`는 `1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1`(10종), `4K`는 `16:9, 9:16, 21:9, 1.91:1`(4종, wide만). 미지원 값 거부 방식이 해상도별로 다름 — `1K`/`2K`는 제출 `202` 후 처리 중 `failed`(과금되나 환불됨), `4K`는 제출 즉시 `400 VALIDATION_ERROR`. 서버 에러 메시지가 허용 목록을 그대로 반환하므로 새 비율은 미지원 값 1회 실호출로 역추적 가능. `aspect_ratio`/`resolution`은 free-form string으로 서버 미검증 통과(`quality`만 enum 검증)이고 모델·해상도·시점별로 목록이 달라 **클라이언트 화이트리스트 가드는 두지 않음**(false-rejection 위험) — describe로만 안내.
+- **임의 픽셀 사이즈(`aspect_ratio:"custom"`)** (2026-06-23 실측): `gpt-image-2`/`-edit`에 `aspect_ratio:"custom"` + `width`/`height`를 주면 **정확히 그 픽셀로 출력**(예: `1024×1152`, `1536×864` 그대로 반환 — `width`/`height`가 모델 페이로드에 그대로 전달됨). `width`/`height` **둘 다 필수**이고 **각각 16의 배수·최장변 ≤3840·총픽셀 655,360~8,294,400** 제약(위반·누락 시 제출 즉시 `400` + 제약 메시지 반환, 무과금 — 새 제약은 위반 값 1회 실호출로 역추적 가능). 비용은 해상도 티어(미지정 시 1K급)대로 과금. **정확 픽셀은 `gpt-image-2`/`-edit` 한정** — `seedream-4.5`는 비율만 유지하고 ~2K로 리스케일(`1024×1152`→`1824×2048`), `nano-banana-pro`는 `width`/`height` 무시하고 `2048×2048` 반환(고가). 그래서 `rejectWidthHeightForResolutionModel`은 `custom`이면 모델 무관 통과시키고, 모델별 차이는 스키마/도구 description으로만 안내(가드 화이트리스트 지양 — 위 `aspect_ratio`와 동일 철학).
 
 ## 다중 레퍼런스 이미지 (image edit, 중요)
 - `/v1/image/edit`는 **단일 `imageUrl`(필수, primary) + `imageUrls`(선택, 추가 레퍼런스 배열)** 을 받음. 서버가 `[imageUrl, ...imageUrls]`로 중복 제거 후 모델엔 `images` 배열로 전달 (실측 확인: `gpt-image-2-edit`에 노란 원 `imageUrl` + 초록 삼각형 `imageUrls` → 두 도형이 합쳐진 1장 반환).

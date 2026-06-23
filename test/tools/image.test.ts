@@ -102,6 +102,23 @@ describe("xbrush_image_generate", () => {
     expect(mockedApi.mock.calls.length).toBe(before); // 제출 안 됨
   });
 
+  it("resolution 기반 모델(gpt-image-2) + width/height + aspect_ratio:custom → 정상 제출", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    const result = await handlers.get("xbrush_image_generate")!({
+      model: "gpt-image-2",
+      prompt: "a cat",
+      width: 1024,
+      height: 1152,
+      aspect_ratio: "custom",
+      quality: "low",
+    });
+    expect(result.isError).toBeFalsy();
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.data.width).toBe(1024);
+    expect(callArgs.data.height).toBe(1152);
+    expect(callArgs.data.aspectRatio).toBe("custom");
+  });
+
   it("byResolution 모델(seedream-4.5) + height → 거부", async () => {
     const before = mockedApi.mock.calls.length;
     const result = await handlers.get("xbrush_image_generate")!({
@@ -258,6 +275,23 @@ describe("xbrush_image_edit", () => {
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain("resolution");
     expect(mockedApi.mock.calls.length).toBe(before);
+  });
+
+  it("resolution 기반 edit 모델(gpt-image-2-edit) + width/height + aspect_ratio:custom → 정상 제출", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    const result = await handlers.get("xbrush_image_edit")!({
+      model: "gpt-image-2-edit",
+      prompt: "p",
+      image_url: "https://a.com/i.png",
+      width: 1536,
+      height: 864,
+      aspect_ratio: "custom",
+    });
+    expect(result.isError).toBeFalsy();
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.data.width).toBe(1536);
+    expect(callArgs.data.height).toBe(864);
+    expect(callArgs.data.aspectRatio).toBe("custom");
   });
 
   it("resolution/aspect_ratio/quality → body 매핑", async () => {

@@ -46,19 +46,34 @@ const RESOLUTION_BASED_MODELS = new Set<string>([
 /**
  * Returns an error result if width/height were passed to a resolution-based
  * model (which would ignore them), otherwise null to continue.
+ *
+ * Exception — aspect_ratio "custom": this tells the server to honor width/height
+ * as the exact requested output size instead of the resolution/aspect_ratio
+ * tiers. Verified live on gpt-image-2: {width:1024,height:1152,aspect_ratio:
+ * "custom"} returned exactly 1024x1152, and {1536,864} returned 1536x864.
+ * (Other resolution models behave differently in custom mode — seedream-4.5
+ * keeps only the ratio and rescales to ~2K, nano-banana-pro ignores it entirely
+ * — so custom width/height is reliable only on gpt-image-2/-edit. We still let
+ * the request through for any model and leave the per-model behavior to the
+ * server; see schema/description notes.) custom requires width/height — sending
+ * aspect_ratio:"custom" alone is rejected by the server with HTTP 400.
  */
 function rejectWidthHeightForResolutionModel(
   model: string,
   width: number | undefined,
-  height: number | undefined
+  height: number | undefined,
+  aspectRatio: string | undefined
 ): CallToolResult | null {
   if (!RESOLUTION_BASED_MODELS.has(model)) return null;
   if (width === undefined && height === undefined) return null;
+  if (aspectRatio === "custom") return null;
   return buildToolResult(
     `Error: model '${model}' sizes output by resolution tier and ignores width/height ` +
       `(they are dropped before reaching the model).\n\n` +
-      `Suggestion: remove width/height and use 'resolution' (e.g. "1K", "2K", "4K") ` +
-      `and/or 'aspect_ratio' (e.g. "1:1", "16:9"). gpt-image-2/-edit also accept 'quality' (low/medium/high).`,
+      `Suggestion: either (a) drop width/height and use 'resolution' ("1K"/"2K"/"4K") ` +
+      `and/or 'aspect_ratio' ("1:1","16:9", ...), or (b) set aspect_ratio:"custom" together ` +
+      `with width/height to request an exact pixel size (works precisely on gpt-image-2/-edit). ` +
+      `gpt-image-2/-edit also accept 'quality' (low/medium/high).`,
     true
   );
 }
@@ -81,14 +96,14 @@ export function registerImageTools(server: McpServer): void {
         "  prompt (string, required): Text description of the image.",
         "  n (int, optional): Number of images (1-8). Default: 1.",
         "  negative_prompt (string, optional): Elements to exclude.",
-        "  width (int, optional): Width in pixels (256-4096), megapixel-based models only (flux.*, z-image-turbo, ...). Default: 1024.",
-        "  height (int, optional): Height in pixels (256-4096), megapixel-based models only. Default: 1024.",
+        "  width (int, optional): Width in pixels (256-4096). Megapixel-based models (flux.*, z-image-turbo, ...) use it directly (default 1024). Resolution-based models ignore it UNLESS aspect_ratio:\"custom\" (see aspect_ratio).",
+        "  height (int, optional): Height in pixels (256-4096). Same rules as width.",
         "  resolution (string, optional): Resolution tier for resolution-based models (gpt-image-2, seedream-*, nano-banana-pro/2), e.g. \"1K\"/\"2K\"/\"4K\".",
-        "  aspect_ratio (string, optional): Aspect ratio for resolution-based models. gpt-image-2/-edit: 1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1 (1K/2K); only 16:9/9:16/21:9/1.91:1 at 4K.",
+        "  aspect_ratio (string, optional): Aspect ratio for resolution-based models. gpt-image-2/-edit: 1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1 (1K/2K); only 16:9/9:16/21:9/1.91:1 at 4K. Special value \"custom\": gpt-image-2/-edit output the exact width×height you pass (both required; each a multiple of 16, longest edge ≤3840, total pixels 655,360–8,294,400) — e.g. width:1024,height:1152,aspect_ratio:\"custom\" returns 1024×1152.",
         "  quality (string, optional): low/medium/high — gpt-image-2/-edit only.",
         "  seed (int, optional): Random seed for reproducibility.",
         "",
-        "Note: resolution-based models (gpt-image-2, seedream-*, nano-banana-pro/2) ignore width/height — passing them returns an error; use resolution/aspect_ratio instead.",
+        "Note: resolution-based models (gpt-image-2, seedream-*, nano-banana-pro/2) ignore width/height — passing them returns an error. Exception: aspect_ratio:\"custom\" with width+height yields an EXACT pixel size on gpt-image-2/-edit (other resolution models may only keep the ratio or ignore it).",
       ].join("\n"),
       inputSchema: ImageGenerateSchema,
       annotations: {
@@ -99,7 +114,7 @@ export function registerImageTools(server: McpServer): void {
       },
     },
     async (args) => {
-      const rejection = rejectWidthHeightForResolutionModel(args.model, args.width, args.height);
+      const rejection = rejectWidthHeightForResolutionModel(args.model, args.width, args.height, args.aspect_ratio);
       if (rejection) return rejection;
 
       const body: Record<string, unknown> = {
@@ -142,14 +157,14 @@ export function registerImageTools(server: McpServer): void {
         "  n (int, optional): Number of results (1-8). Default: 1.",
         "  mask_url (string, optional): Mask image URL (white=edit, black=preserve).",
         "  mode (string, optional): Hint 'inpaint'/'outpaint'; the chosen model determines the actual operation.",
-        "  width (int, optional): Output width (256-4096), megapixel/outpaint models only. For outpaint, target canvas width.",
-        "  height (int, optional): Output height (256-4096), megapixel/outpaint models only. For outpaint, target canvas height.",
+        "  width (int, optional): Output width (256-4096). Megapixel/outpaint models use it directly (outpaint: target canvas width). Resolution-based edit models ignore it UNLESS aspect_ratio:\"custom\" (see aspect_ratio).",
+        "  height (int, optional): Output height (256-4096). Same rules as width (outpaint: target canvas height).",
         "  resolution (string, optional): Resolution tier for resolution-based edit models (gpt-image-2-edit, seedream-*-edit, nano-banana-pro/2-edit), e.g. \"1K\"/\"2K\"/\"4K\".",
-        "  aspect_ratio (string, optional): Aspect ratio for resolution-based edit models. gpt-image-2-edit: 1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1 (1K/2K); only 16:9/9:16/21:9/1.91:1 at 4K.",
+        "  aspect_ratio (string, optional): Aspect ratio for resolution-based edit models. gpt-image-2-edit: 1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1 (1K/2K); only 16:9/9:16/21:9/1.91:1 at 4K. Special value \"custom\": gpt-image-2-edit outputs the exact width×height you pass (both required; each a multiple of 16, longest edge ≤3840, total pixels 655,360–8,294,400).",
         "  quality (string, optional): low/medium/high — gpt-image-2-edit only.",
         "  seed (int, optional): Random seed.",
         "",
-        "Note: resolution-based edit models (gpt-image-2-edit, seedream-*-edit, nano-banana-pro/2-edit) ignore width/height — passing them returns an error; use resolution/aspect_ratio instead.",
+        "Note: resolution-based edit models (gpt-image-2-edit, seedream-*-edit, nano-banana-pro/2-edit) ignore width/height — passing them returns an error. Exception: aspect_ratio:\"custom\" with width+height yields an EXACT pixel size on gpt-image-2-edit.",
         "Note: to give multiple reference images (e.g. compose two subjects with gpt-image-2-edit), put the primary in image_url and the rest in image_urls.",
       ].join("\n"),
       inputSchema: ImageEditSchema,
@@ -161,7 +176,7 @@ export function registerImageTools(server: McpServer): void {
       },
     },
     async (args) => {
-      const rejection = rejectWidthHeightForResolutionModel(args.model, args.width, args.height);
+      const rejection = rejectWidthHeightForResolutionModel(args.model, args.width, args.height, args.aspect_ratio);
       if (rejection) return rejection;
 
       const body: Record<string, unknown> = {
