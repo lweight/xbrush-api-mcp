@@ -33,6 +33,34 @@ describe("VideoGenerateSchema", () => {
     expect(result.prompt_relevance).toBe(0.7);
   });
 
+  it("model만으로 유효 (image_url optional)", () => {
+    const result = VideoGenerateSchema.parse({ model: "seedance-2.0", prompt: "a cat" });
+    expect(result.model).toBe("seedance-2.0");
+    expect(result.image_url).toBeUndefined();
+  });
+
+  it("reference-to-video: image_urls 배열 유효 (image_url 없이)", () => {
+    const result = VideoGenerateSchema.parse({
+      model: "seedance-2.0",
+      prompt: "@Image1 walks past @Image2",
+      image_urls: [VALID_URL, "https://assets.xbrush.ai/ref2.png"],
+    });
+    expect(result.image_urls).toEqual([VALID_URL, "https://assets.xbrush.ai/ref2.png"]);
+    expect(result.image_url).toBeUndefined();
+  });
+
+  it("image_urls 원소가 URL 아니면 거부", () => {
+    expect(() =>
+      VideoGenerateSchema.parse({ model: "seedance-2.0", image_urls: ["not-a-url"] })
+    ).toThrow();
+  });
+
+  it("image_urls 빈 배열 거부", () => {
+    expect(() =>
+      VideoGenerateSchema.parse({ model: "seedance-2.0", image_urls: [] })
+    ).toThrow();
+  });
+
   it("sync 필드 거부 (async 전용)", () => {
     expect(() => VideoGenerateSchema.parse({ ...base, sync: true })).toThrow();
   });
@@ -41,8 +69,10 @@ describe("VideoGenerateSchema", () => {
     expect(() => VideoGenerateSchema.parse({ image_url: VALID_URL })).toThrow();
   });
 
-  it("image_url 누락 시 에러", () => {
-    expect(() => VideoGenerateSchema.parse({ model: "kling" })).toThrow();
+  it("image_url 누락 허용 (optional — t2v / reference-to-video)", () => {
+    const result = VideoGenerateSchema.parse({ model: "kling" });
+    expect(result.model).toBe("kling");
+    expect(result.image_url).toBeUndefined();
   });
 
   it("image_url이 URL 아닌 경우 거부", () => {
@@ -67,10 +97,23 @@ describe("VideoGenerateSchema", () => {
     expect(result.duration).toBe(10);
   });
 
-  it("duration=7 거부", () => {
-    expect(() =>
-      VideoGenerateSchema.parse({ ...base, duration: 7 })
-    ).toThrow();
+  it("duration=7 유효 (model-specific 범위 — 서버가 모델별로 검증)", () => {
+    const result = VideoGenerateSchema.parse({ ...base, duration: 7 });
+    expect(result.duration).toBe(7);
+  });
+
+  it("duration=15 유효 (seedance-2.0 상한)", () => {
+    const result = VideoGenerateSchema.parse({ ...base, duration: 15 });
+    expect(result.duration).toBe(15);
+  });
+
+  it("duration 정수 아니면 거부", () => {
+    expect(() => VideoGenerateSchema.parse({ ...base, duration: 5.5 })).toThrow();
+  });
+
+  it("duration 범위(1-20) 밖 거부", () => {
+    expect(() => VideoGenerateSchema.parse({ ...base, duration: 0 })).toThrow();
+    expect(() => VideoGenerateSchema.parse({ ...base, duration: 21 })).toThrow();
   });
 
   it("prompt_relevance=0 유효", () => {

@@ -90,6 +90,13 @@ npm test             # Vitest 전체 실행
 - `xbrush_image_edit` 스키마의 `image_urls`가 `imageUrls`로 매핑됨. `imageUrls`만 보내고 `imageUrl`을 빠뜨리면 422(`imageUrl` 필수).
 - 주의: 무과금 역추적 시 잘못된 모델명 게이트(`__nope__`)를 쓰면 이미지 처리 단계 전 `INVALID_MODEL`로 끊겨 `imageUrls` 소비 여부를 못 봄 — 다중 레퍼런스류는 유효 모델로 최저가 티어(예: `resolution:"1K", quality:"low"`) 실호출로 검증할 것.
 
+## 비디오 generate — duration & reference-to-video (seedance 2.0, 중요)
+- `/v1/video/generate`의 검증은 **모델 인지(model-aware)**. 빈 body/오류 타입 POST 시 해당 모델 기준으로 인식 필드를 `error.fields[]`에 모두 반환 → 무과금 역추적 가능(`{model, prompt, <후보필드>:잘못된값}` 식). seedance-2.0 인식 필드(2026-06-25 실측): `imageUrl`, `imageUrls`(array), `prompt`, `idea`, `duration`, `resolution`(enum `512p/768p/480p/720p/1080p/1440p/2160p/4k`), `aspectRatio`(enum `auto/adaptive/16:9/9:16/1:1/4:3/3:4/21:9`), `generateAudio`(bool), `consistencyMode`(서버 기본 `overlay` → `face_mesh_mode`로 매핑). `endImageUrl`은 seedance-2.0엔 미인식(end-frame 입력 없는 모델). 미인식 필드는 strict가 아니라 **그냥 무시**됨.
+- **`image_url`은 optional** — 과거 스키마가 필수로 강제했으나 오류. seedance-2.0는 t2v(prompt만)·reference-to-video(`image_urls`)에서 시작 프레임 불필요. 필요 입력은 모델이 결정(없으면 서버가 "prompt or idea required" 등으로 거부).
+- **duration은 모델별 범위** (`xbrush_list_models`의 `constraints`로 노출: `{min,max,step,default}`). 과거 스키마 `5|10` 리터럴은 대부분 모델에서 오답(veo3 4–8, seedance-2.0/-fast 4–15 step1 default5, kling-v3/wan-2.7 ~15, wan-v2-2-14b min1). 스키마는 `int().min(1).max(20)`(generate 계열 관측 전 범위 커버)로 두고 모델별 정밀 범위는 **서버가 검증**(클라 화이트리스트 지양 — false-rejection 방지).
+- **reference-to-video(멀티 레퍼런스)**: seedance-2.0/-fast는 `imageUrls`(array) → 모델 `video_params.image_urls`로 전달(실측: req detail의 `input.video_params.image_urls`에 그대로 echo). **`imageUrl` 없이 단독 사용 가능**(image edit과 달리 primary 필수 아님). 프롬프트에서 `@Image1`, `@Image2`로 각 레퍼런스 지시. `xbrush_video_generate` 스키마 `image_urls` → `imageUrls` 매핑.
+- **검증 방법(과금 거의 0)**: `imageUrls` 원소는 서버가 URL 형식 미검증 → 잘못된 host/scheme면 제출 `202` 후 처리 중 `failed`(과금되나 **환불**됨, req detail `credits.refunded` 확인). 정상 검증은 `assets.xbrush.ai`(파일 업로드 CDN, host 허용목록 통과)에 올린 URL로 seedance-2.0-fast `480p`(=0.0728 credit/sec) 최저가 실호출(예: 4s = 0.2912 credit).
+
 ## 파일 업로드 플로우
 `xbrush_file_upload`에 `strategy` 파라미터로 경로 선택:
 
@@ -108,7 +115,7 @@ npm test             # Vitest 전체 실행
 
 ## 테스트
 - **Vitest 4-tier**: `test/{schemas,services,tools,integration}/`
-- 현재 v2.2.0 기준 **290 케이스** 통과
+- 현재 v2.5.0 기준 **306 케이스** 통과
 - `npm test` / `npm run test:watch`
 - 통합 테스트는 axios mock 사용, 실 API 호출 없음
 - MCP Inspector 또는 Claude Code에서 수동 E2E

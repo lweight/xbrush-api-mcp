@@ -57,7 +57,7 @@ The blocking `/sync` endpoints are intentionally never called (see `CLAUDE.md`).
 
 | Tool | Description |
 |------|-------------|
-| `xbrush_video_generate` | Image-to-video (e.g. kling-v3, veo3.1, seedance-2.0, hailuo-02, wan-2.5) |
+| `xbrush_video_generate` | Image-/text-/reference-to-video (e.g. kling-v3, veo3.1, seedance-2.0, hailuo-02, wan-2.5). seedance-2.0 supports multi-reference via `image_urls` + `@ImageN` prompts and model-specific `duration` (4–15s) |
 | `xbrush_video_upscale` | Upscale videos (realesrgan, seedvr) |
 | `xbrush_video_lip_sync` | Lip-sync a face video to an audio track |
 | `xbrush_video_extend` | Extend an existing video by 1–20 seconds |

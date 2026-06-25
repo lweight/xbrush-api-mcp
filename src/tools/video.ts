@@ -25,15 +25,16 @@ export function registerVideoTools(server: McpServer): void {
     {
       title: "Generate Video",
       description: [
-        "Generate a video from a start image and optional prompt.",
+        "Generate a video from a start image, a text prompt, and/or reference images (reference-to-video).",
         "Submits async — poll the returned request_id with xbrush_get_request (typical wait 2-10 min).",
         "",
         "Args:",
-        "  model (string, required): Video model ID (e.g. kling, wan, veo3). Use xbrush_list_models(category='video').",
-        "  image_url (string, required): URL of the start image (first frame).",
-        "  prompt (string, optional): Motion/action description.",
-        "  end_image_url (string, optional): URL of the end image (last frame).",
-        "  duration (int, optional): 5 or 10 seconds.",
+        "  model (string, required): Video model ID (e.g. kling, wan, veo3, seedance-2.0). Use xbrush_list_models(category='video').",
+        "  image_url (string, optional): Start image (first frame) for image-to-video. Not needed for text-to-video or reference-to-video.",
+        "  image_urls (string[], optional): Reference images for reference-to-video models (e.g. seedance-2.0). Cite them in the prompt as @Image1, @Image2, …. image_url is not required when this is set.",
+        "  prompt (string, optional): Motion/action description (use @ImageN to reference image_urls). Required for text-to-video.",
+        "  end_image_url (string, optional): End image (last frame), for models that support an end frame.",
+        "  duration (int, optional): Seconds; valid range is model-specific (e.g. seedance-2.0 4–15, kling 5/10, veo3 4–8).",
         "  prompt_relevance (float, optional): Prompt adherence (0.0-1.0).",
       ].join("\n"),
       inputSchema: VideoGenerateSchema,
@@ -47,8 +48,9 @@ export function registerVideoTools(server: McpServer): void {
     async (args) => {
       const body: Record<string, unknown> = {
         model: args.model,
-        imageUrl: args.image_url,
       };
+      if (args.image_url !== undefined) body.imageUrl = args.image_url;
+      if (args.image_urls !== undefined) body.imageUrls = args.image_urls;
       if (args.prompt !== undefined) body.prompt = args.prompt;
       if (args.end_image_url !== undefined) body.endImageUrl = args.end_image_url;
       if (args.duration !== undefined) body.duration = args.duration;

@@ -91,6 +91,34 @@ describe("xbrush_video_generate", () => {
     });
   });
 
+  it("image_url 없이 model만 — body에 imageUrl 미포함", async () => {
+    mockedApi.mockResolvedValueOnce(mockVideoAsync);
+    await handlers.get("xbrush_video_generate")!({
+      model: "seedance-2.0",
+      prompt: "a cat",
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.data).toEqual({ model: "seedance-2.0", prompt: "a cat" });
+    expect(callArgs.data).not.toHaveProperty("imageUrl");
+  });
+
+  it("reference-to-video: image_urls → imageUrls 매핑 (image_url 없이)", async () => {
+    mockedApi.mockResolvedValueOnce(mockVideoAsync);
+    await handlers.get("xbrush_video_generate")!({
+      model: "seedance-2.0",
+      prompt: "@Image1 and @Image2 dance",
+      image_urls: ["https://a.com/ref1.png", "https://a.com/ref2.png"],
+      duration: 12,
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.data.imageUrls).toEqual([
+      "https://a.com/ref1.png",
+      "https://a.com/ref2.png",
+    ]);
+    expect(callArgs.data.duration).toBe(12);
+    expect(callArgs.data).not.toHaveProperty("imageUrl");
+  });
+
   it("API 에러 → isError 결과", async () => {
     mockedApi.mockRejectedValueOnce(new Error("video service down"));
     const result = await handlers.get("xbrush_video_generate")!({
