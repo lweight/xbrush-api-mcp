@@ -7,6 +7,7 @@
  */
 
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   VideoGenerateSchema,
   VideoUpscaleSchema,
@@ -14,6 +15,64 @@ import {
   VideoRetakeSchema,
 } from "../schemas/video.js";
 import { submitAsync } from "../services/dispatch.js";
+import { buildToolResult } from "../services/xbrush-client.js";
+
+// ── @ImageN reference guard ───────────────────────────────────────────
+// Common mistake: the model writes @Image1 in the prompt/idea to mean "the
+// first reference image", but @ImageN actually addresses the N-th entry of
+// image_urls by 1-based ARRAY POSITION — first_frame/last_frame included. So
+// for image_urls=[last_frame, reference_image] the reference is @Image2, and
+// @Image1 points at the last_frame. We catch the two failure modes up front
+// and return the real position→role mapping so the caller can correct it.
+type ImageRef = string | { url: string; role?: string };
+
+function roleOf(el: ImageRef): string | undefined {
+  return typeof el === "object" && el !== null ? el.role : undefined;
+}
+
+function checkImageReferences(
+  prompt: string | undefined,
+  idea: string | undefined,
+  imageUrls: ImageRef[] | undefined
+): CallToolResult | null {
+  if (!imageUrls || imageUrls.length === 0) return null;
+  const text = `${prompt ?? ""}\n${idea ?? ""}`;
+  const matches = [...text.matchAll(/@image\s*(\d+)/gi)];
+  if (matches.length === 0) return null;
+
+  const n = imageUrls.length;
+  const mapping = imageUrls
+    .map((el, i) => `@Image${i + 1}=${roleOf(el) ?? (typeof el === "string" ? "url" : "no role")}`)
+    .join(", ");
+
+  for (const m of matches) {
+    const k = Number(m[1]);
+    if (k < 1 || k > n) {
+      return buildToolResult(
+        `Error: prompt/idea references @Image${k}, but image_urls has ${n} ` +
+          `entr${n === 1 ? "y" : "ies"} (valid: @Image1..@Image${n}). @ImageN addresses the N-th ` +
+          `entry of image_urls by array position. Current mapping: ${mapping}.`,
+        true
+      );
+    }
+    const role = roleOf(imageUrls[k - 1]);
+    if (role === "first_frame" || role === "last_frame") {
+      const refs = imageUrls
+        .map((el, i) => (roleOf(el) === "reference_image" ? `@Image${i + 1}` : null))
+        .filter((x): x is string => x !== null);
+      return buildToolResult(
+        `Error: prompt/idea uses @Image${k}, but position ${k} of image_urls has role '${role}' ` +
+          `(a frame, not a citable subject). @ImageN counts ALL entries by array position. ` +
+          (refs.length
+            ? `To cite a reference_image use: ${refs.join(", ")}. `
+            : `There are no reference_image entries to cite. `) +
+          `Either use the correct @Image position or reorder image_urls. Current mapping: ${mapping}.`,
+        true
+      );
+    }
+  }
+  return null;
+}
 
 // ── Tool Registration ─────────────────────────────────────────────────
 
@@ -31,9 +90,9 @@ export function registerVideoTools(server: McpServer): void {
         "Args:",
         "  model (string, required): Video model ID (e.g. kling, wan, veo3, seedance-2.0). Use xbrush_list_models(category='video').",
         "  image_url (string, optional): Start image (first frame) for image-to-video. Not needed for text-to-video or reference-to-video.",
-        "  image_urls (array, optional): Reference images for reference-to-video models (seedance-2.0/-fast). Each item is a URL string OR an object {url, role} where role is first_frame/last_frame/reference_image — so one call can combine a start frame, an end frame, and subject references. Cite reference_image items in the prompt/idea as @Image1, @Image2, …. image_url is not required when this is set.",
-        "  prompt (string, optional): ENGLISH motion/action description, sent to the model as-is (use @ImageN to reference image_urls). Use 'idea' instead for non-English text. Provide prompt or idea for text-to-video.",
-        "  idea (string, optional): NON-English description (e.g. Korean) — the server translates it before generation. Use this instead of prompt when not writing in English (use @ImageN to reference image_urls).",
+        "  image_urls (array, optional): Reference images for reference-to-video models (seedance-2.0/-fast). Each item is a URL string OR an object {url, role} where role is first_frame/last_frame/reference_image — so one call can combine a start frame, an end frame, and subject references. NUMBERING: in prompt/idea, @ImageN = the N-th item here by 1-based ARRAY POSITION, counting first_frame/last_frame too (NOT 'the N-th reference'). E.g. [last_frame, reference_image] → the reference is @Image2. image_url is not required when this is set.",
+        "  prompt (string, optional): ENGLISH motion/action description, sent to the model as-is. Reference an image_urls item as @ImageN (N = its 1-based position in image_urls). Use 'idea' instead for non-English text. Provide prompt or idea for text-to-video.",
+        "  idea (string, optional): NON-English description (e.g. Korean) — the server translates it before generation. Use this instead of prompt when not writing in English. Reference an image_urls item as @ImageN (N = its 1-based position in image_urls).",
         "  end_image_url (string, optional): End image (last frame), for models that support an end frame.",
         "  duration (int, optional): Seconds; valid range is model-specific (e.g. seedance-2.0 4–15, kling 5/10, veo3 4–8).",
         "  resolution (string, optional): Resolution tier for models that support it (seedance-2.0: 480p/720p/1080p/1440p/2160p/4k/512p/768p). Server-validated per model.",
@@ -51,6 +110,9 @@ export function registerVideoTools(server: McpServer): void {
       },
     },
     async (args) => {
+      const refError = checkImageReferences(args.prompt, args.idea, args.image_urls);
+      if (refError) return refError;
+
       const body: Record<string, unknown> = {
         model: args.model,
       };

@@ -4,8 +4,8 @@ export const VideoGenerateSchema = z
   .object({
     model: z.string().describe("Video model to use (e.g. kling-v2-1-pro, wan-v2-2-14b, veo3, seedance-2.0). Use xbrush_list_models with category='video' to see options."),
     image_url: z.string().url().optional().describe("URL of the start image (first frame) for image-to-video. Optional — text-to-video (prompt only) and reference-to-video (image_urls) models don't need it. The selected model decides what is required."),
-    prompt: z.string().optional().describe("Motion/action description in ENGLISH — sent to the model as-is. Use this when writing directly in English; for any non-English text use 'idea' instead (the server translates it). Cite reference_image entries (in image_urls) as @Image1, @Image2, …. Provide prompt OR idea (required for text-to-video when no image is supplied)."),
-    idea: z.string().optional().describe("Same purpose as prompt but for NON-English text (e.g. Korean): the server translates it before sending to the model. Use 'idea' for non-English, 'prompt' for English. Cite reference_image entries (in image_urls) as @Image1, @Image2, …. Provide prompt OR idea."),
+    prompt: z.string().optional().describe("Motion/action description in ENGLISH — sent to the model as-is. Use this when writing directly in English; for any non-English text use 'idea' instead (the server translates it). Reference an image_urls entry as @ImageN, where N is its 1-based position in the image_urls array (first_frame/last_frame count toward the position too). Provide prompt OR idea (required for text-to-video when no image is supplied)."),
+    idea: z.string().optional().describe("Same purpose as prompt but for NON-English text (e.g. Korean): the server translates it before sending to the model. Use 'idea' for non-English, 'prompt' for English. Reference an image_urls entry as @ImageN, where N is its 1-based position in the image_urls array (first_frame/last_frame count toward the position too). Provide prompt OR idea."),
     image_urls: z
       .array(
         z.union([
@@ -33,7 +33,11 @@ export const VideoGenerateSchema = z
           "Each element is EITHER a plain URL string OR an object {url, role} where role is " +
           "'first_frame' | 'last_frame' | 'reference_image'. The {url, role} form lets a single call combine a start frame, " +
           "an end frame, and subject/style references in one list (passed through to the model as video_params.image_urls). " +
-          "Standalone: image_url is not required when this is set. In the prompt, cite reference_image entries as @Image1, @Image2, …. " +
+          "Standalone: image_url is not required when this is set. " +
+          "NUMBERING (important): in prompt/idea, @Image1, @Image2, … refer to entries of THIS array by 1-based position " +
+          "in array order, counting EVERY entry — first_frame and last_frame included, NOT only reference_image entries. " +
+          "Example: image_urls=[{url, role:'last_frame'}, {url, role:'reference_image'}] → the reference is @Image2, " +
+          "because last_frame occupies position 1. To make a reference @Image1, place it first in the array. " +
           "Ignored by models without a reference-image input."
       ),
     end_image_url: z.string().url().optional().describe("URL of the end image (last frame). Creates a transition from start to end. Supported by select models (e.g. kling); ignored by models without an end-frame input such as seedance-2.0."),
