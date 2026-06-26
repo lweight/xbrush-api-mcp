@@ -119,6 +119,51 @@ describe("xbrush_video_generate", () => {
     expect(callArgs.data).not.toHaveProperty("imageUrl");
   });
 
+  it("reference-to-video: image_urls 객체 {url, role} → imageUrls 그대로 매핑", async () => {
+    mockedApi.mockResolvedValueOnce(mockVideoAsync);
+    const refs = [
+      { url: "https://a.com/start.png", role: "first_frame" },
+      { url: "https://a.com/end.png", role: "last_frame" },
+      { url: "https://a.com/ref.png", role: "reference_image" },
+    ];
+    await handlers.get("xbrush_video_generate")!({
+      model: "seedance-2.0",
+      prompt: "transform with @Image1",
+      image_urls: refs,
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.data.imageUrls).toEqual(refs);
+  });
+
+  it("idea → body.idea 매핑 (비영어)", async () => {
+    mockedApi.mockResolvedValueOnce(mockVideoAsync);
+    await handlers.get("xbrush_video_generate")!({
+      model: "seedance-2.0",
+      idea: "변하는 영상",
+      image_urls: [{ url: "https://a.com/ref.png", role: "reference_image" }],
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.data.idea).toBe("변하는 영상");
+    expect(callArgs.data).not.toHaveProperty("prompt");
+  });
+
+  it("resolution/aspect_ratio/generate_audio/consistency_mode → camelCase 매핑", async () => {
+    mockedApi.mockResolvedValueOnce(mockVideoAsync);
+    await handlers.get("xbrush_video_generate")!({
+      model: "seedance-2.0",
+      prompt: "x",
+      resolution: "720p",
+      aspect_ratio: "adaptive",
+      generate_audio: true,
+      consistency_mode: "advanced",
+    });
+    const callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.data.resolution).toBe("720p");
+    expect(callArgs.data.aspectRatio).toBe("adaptive");
+    expect(callArgs.data.generateAudio).toBe(true);
+    expect(callArgs.data.consistencyMode).toBe("advanced");
+  });
+
   it("API 에러 → isError 결과", async () => {
     mockedApi.mockRejectedValueOnce(new Error("video service down"));
     const result = await handlers.get("xbrush_video_generate")!({

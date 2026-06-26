@@ -61,6 +61,105 @@ describe("VideoGenerateSchema", () => {
     ).toThrow();
   });
 
+  it("reference-to-video: image_urls 객체 {url, role} 유효", () => {
+    const refs = [
+      { url: VALID_URL, role: "first_frame" },
+      { url: "https://assets.xbrush.ai/ref2.png", role: "last_frame" },
+      { url: "https://assets.xbrush.ai/ref3.png", role: "reference_image" },
+    ];
+    const result = VideoGenerateSchema.parse({
+      model: "seedance-2.0",
+      prompt: "변하는 영상",
+      image_urls: refs,
+    });
+    expect(result.image_urls).toEqual(refs);
+  });
+
+  it("image_urls 객체 role 생략 유효 (role optional)", () => {
+    const result = VideoGenerateSchema.parse({
+      model: "seedance-2.0",
+      prompt: "x",
+      image_urls: [{ url: VALID_URL }],
+    });
+    expect(result.image_urls).toEqual([{ url: VALID_URL }]);
+  });
+
+  it("image_urls 문자열 + 객체 혼합 유효 (하위호환)", () => {
+    const mixed = [
+      VALID_URL,
+      { url: "https://assets.xbrush.ai/ref2.png", role: "reference_image" },
+    ];
+    const result = VideoGenerateSchema.parse({
+      model: "seedance-2.0",
+      prompt: "x",
+      image_urls: mixed,
+    });
+    expect(result.image_urls).toEqual(mixed);
+  });
+
+  it("image_urls 객체에 url 없으면 거부", () => {
+    expect(() =>
+      VideoGenerateSchema.parse({
+        model: "seedance-2.0",
+        image_urls: [{ role: "first_frame" }],
+      })
+    ).toThrow();
+  });
+
+  it("image_urls 객체 url이 비URL이면 거부", () => {
+    expect(() =>
+      VideoGenerateSchema.parse({
+        model: "seedance-2.0",
+        image_urls: [{ url: "nope", role: "first_frame" }],
+      })
+    ).toThrow();
+  });
+
+  it("image_urls 객체에 미정의 키 있으면 거부 (strict)", () => {
+    expect(() =>
+      VideoGenerateSchema.parse({
+        model: "seedance-2.0",
+        image_urls: [{ url: VALID_URL, weight: 1 }],
+      })
+    ).toThrow();
+  });
+
+  it("idea 필드 유효 (비영어 — 서버 번역)", () => {
+    const result = VideoGenerateSchema.parse({
+      model: "seedance-2.0",
+      idea: "변하는 영상이고 @Image1이 잠깐 나와",
+      image_urls: [{ url: VALID_URL, role: "reference_image" }],
+    });
+    expect(result.idea).toBe("변하는 영상이고 @Image1이 잠깐 나와");
+  });
+
+  it("prompt와 idea 둘 다 optional (서버가 prompt|idea 검증)", () => {
+    const result = VideoGenerateSchema.parse({ model: "seedance-2.0" });
+    expect(result.prompt).toBeUndefined();
+    expect(result.idea).toBeUndefined();
+  });
+
+  it("resolution/aspect_ratio/generate_audio/consistency_mode 유효", () => {
+    const result = VideoGenerateSchema.parse({
+      model: "seedance-2.0",
+      prompt: "x",
+      resolution: "720p",
+      aspect_ratio: "adaptive",
+      generate_audio: true,
+      consistency_mode: "advanced",
+    });
+    expect(result.resolution).toBe("720p");
+    expect(result.aspect_ratio).toBe("adaptive");
+    expect(result.generate_audio).toBe(true);
+    expect(result.consistency_mode).toBe("advanced");
+  });
+
+  it("generate_audio 불리언 아니면 거부", () => {
+    expect(() =>
+      VideoGenerateSchema.parse({ model: "seedance-2.0", prompt: "x", generate_audio: "yes" })
+    ).toThrow();
+  });
+
   it("sync 필드 거부 (async 전용)", () => {
     expect(() => VideoGenerateSchema.parse({ ...base, sync: true })).toThrow();
   });

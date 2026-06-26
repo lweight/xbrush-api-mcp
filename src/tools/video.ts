@@ -31,10 +31,15 @@ export function registerVideoTools(server: McpServer): void {
         "Args:",
         "  model (string, required): Video model ID (e.g. kling, wan, veo3, seedance-2.0). Use xbrush_list_models(category='video').",
         "  image_url (string, optional): Start image (first frame) for image-to-video. Not needed for text-to-video or reference-to-video.",
-        "  image_urls (string[], optional): Reference images for reference-to-video models (e.g. seedance-2.0). Cite them in the prompt as @Image1, @Image2, …. image_url is not required when this is set.",
-        "  prompt (string, optional): Motion/action description (use @ImageN to reference image_urls). Required for text-to-video.",
+        "  image_urls (array, optional): Reference images for reference-to-video models (seedance-2.0/-fast). Each item is a URL string OR an object {url, role} where role is first_frame/last_frame/reference_image — so one call can combine a start frame, an end frame, and subject references. Cite reference_image items in the prompt/idea as @Image1, @Image2, …. image_url is not required when this is set.",
+        "  prompt (string, optional): ENGLISH motion/action description, sent to the model as-is (use @ImageN to reference image_urls). Use 'idea' instead for non-English text. Provide prompt or idea for text-to-video.",
+        "  idea (string, optional): NON-English description (e.g. Korean) — the server translates it before generation. Use this instead of prompt when not writing in English (use @ImageN to reference image_urls).",
         "  end_image_url (string, optional): End image (last frame), for models that support an end frame.",
         "  duration (int, optional): Seconds; valid range is model-specific (e.g. seedance-2.0 4–15, kling 5/10, veo3 4–8).",
+        "  resolution (string, optional): Resolution tier for models that support it (seedance-2.0: 480p/720p/1080p/1440p/2160p/4k/512p/768p). Server-validated per model.",
+        "  aspect_ratio (string, optional): Aspect ratio for models that support it (seedance-2.0: auto/adaptive/16:9/9:16/1:1/4:3/3:4/21:9).",
+        "  generate_audio (bool, optional): Generate audio with the video (seedance-2.0/-fast).",
+        "  consistency_mode (string, optional): Reference consistency for reference-to-video (seedance-2.0/-fast): overlay/advanced/auto.",
         "  prompt_relevance (float, optional): Prompt adherence (0.0-1.0).",
       ].join("\n"),
       inputSchema: VideoGenerateSchema,
@@ -52,8 +57,13 @@ export function registerVideoTools(server: McpServer): void {
       if (args.image_url !== undefined) body.imageUrl = args.image_url;
       if (args.image_urls !== undefined) body.imageUrls = args.image_urls;
       if (args.prompt !== undefined) body.prompt = args.prompt;
+      if (args.idea !== undefined) body.idea = args.idea;
       if (args.end_image_url !== undefined) body.endImageUrl = args.end_image_url;
       if (args.duration !== undefined) body.duration = args.duration;
+      if (args.resolution !== undefined) body.resolution = args.resolution;
+      if (args.aspect_ratio !== undefined) body.aspectRatio = args.aspect_ratio;
+      if (args.generate_audio !== undefined) body.generateAudio = args.generate_audio;
+      if (args.consistency_mode !== undefined) body.consistencyMode = args.consistency_mode;
       if (args.prompt_relevance !== undefined) body.promptRelevance = args.prompt_relevance;
 
       return submitAsync({
