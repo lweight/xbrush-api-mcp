@@ -23,9 +23,76 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
         "additionalProperties": false,
         "properties": {
           "content": {
-            "description": "Message text (up to 1,000,000 characters).",
-            "maxLength": 1000000,
-            "type": "string",
+            "anyOf": [
+              {
+                "description": "Plain message text (non-empty, up to 1,000,000 characters).",
+                "maxLength": 1000000,
+                "minLength": 1,
+                "type": "string",
+              },
+              {
+                "description": "Multimodal parts: {type:'text', text} and/or {type:'image_url', image_url:{url, detail?}}. Image parts require a vision-capable model (constraints.vision in xbrush_list_models, e.g. bytedance/seed-2.0-mini, max images per request in constraints.maxImages).",
+                "items": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "text": {
+                          "description": "Text content (non-empty, up to 1,000,000 characters).",
+                          "maxLength": 1000000,
+                          "minLength": 1,
+                          "type": "string",
+                        },
+                        "type": {
+                          "const": "text",
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "type",
+                        "text",
+                      ],
+                      "type": "object",
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "image_url": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "detail": {
+                              "description": "Vision fidelity vs. cost, passed through to the model vendor: 'low', 'high', or 'auto'. 'low' is drastically cheaper (~98 prompt tokens vs ~1,400 per image on seed-2.0-mini); omitted = vendor default (high-tier cost).",
+                              "type": "string",
+                            },
+                            "url": {
+                              "description": "Image as an https URL or a data: URL (base64). Minimum dimension 14px. Upload local files first with xbrush_file_upload and pass the CDN URL.",
+                              "minLength": 1,
+                              "type": "string",
+                            },
+                          },
+                          "required": [
+                            "url",
+                          ],
+                          "type": "object",
+                        },
+                        "type": {
+                          "const": "image_url",
+                          "type": "string",
+                        },
+                      },
+                      "required": [
+                        "type",
+                        "image_url",
+                      ],
+                      "type": "object",
+                    },
+                  ],
+                },
+                "minItems": 1,
+                "type": "array",
+              },
+            ],
+            "description": "Message content: a plain string, or an array of text/image_url parts (vision).",
           },
           "role": {
             "description": "Message author: system (instructions), user, or assistant (prior model turns).",
@@ -48,7 +115,7 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
       "type": "array",
     },
     "model": {
-      "description": "LLM model ID (e.g. z-ai/glm-5.2). Use xbrush_list_models with category='text' to see options and per-token pricing.",
+      "description": "LLM model ID (e.g. z-ai/glm-5.2, bytedance/seed-2.0-mini). Use xbrush_list_models with category='text' to see options, per-token pricing, and vision support.",
       "type": "string",
     },
     "presence_penalty": {
@@ -66,6 +133,26 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
         "max",
       ],
       "type": "string",
+    },
+    "stop": {
+      "anyOf": [
+        {
+          "description": "A single stop sequence (non-empty).",
+          "minLength": 1,
+          "type": "string",
+        },
+        {
+          "description": "1-4 stop sequences (non-empty strings).",
+          "items": {
+            "minLength": 1,
+            "type": "string",
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "type": "array",
+        },
+      ],
+      "description": "Stop sequence(s): generation halts before emitting any of these. A non-empty string or an array of 1-4.",
     },
     "temperature": {
       "description": "Sampling temperature (0-2). Higher = more random.",

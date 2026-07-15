@@ -81,12 +81,14 @@ npm test             # Vitest 전체 실행
 - **유일한 예외: `xbrush_chat`** — `/v1/chat/completions`는 서버에 async 변형이 없어(`/async` 404) 동기 호출. 아래 "LLM chat" 참고.
 
 ## LLM chat — `xbrush_chat` (동기 예외, 중요)
-- **엔드포인트**: `POST /v1/chat/completions` (OpenAI 호환). **동기 전용** — async 변형 없음. 2026-07 `text` 카테고리(`z-ai/glm-5.2`, featureType `chat`, calType `perToken`)와 함께 추가됨.
-- **요청 필드** (2026-07-15 역추적): `model`(필수), `messages`(필수, 1~1000개, `{role: system|user|assistant, content: ≤1,000,000자}`), `max_tokens`/`max_completion_tokens`(1~65536; 서버가 `max_tokens`→`max_completion_tokens`로 정규화), `temperature`(0~2), `top_p`(0~1), `frequency_penalty`/`presence_penalty`(−2~2), `reasoning_effort`(enum `none/minimal/high/max`, 서버 기본 `none`), `stream`(bool — MCP는 미노출). **서버는 strict가 아님**: `stop`/`tools`/`n`/`seed`/`response_format` 등 미인식 필드는 그냥 무시됨(에러 없이 기능도 안 함).
+- **엔드포인트**: `POST /v1/chat/completions` (OpenAI 호환). **동기 전용** — async 변형 없음(2026-07-15 재확인 404). 2026-07 `text` 카테고리(`z-ai/glm-5.2`, featureType `chat`, calType `perToken`)와 함께 추가됨. `/v1/embeddings`/`/v1/completions`/`/v1/responses`는 없음(404).
+- **요청 필드** (2026-07-15 역추적 + 동일자 vision 업데이트 재조사): `model`(필수), `messages`(필수, 1~1000개, `{role: system|user|assistant, content}`), `content`는 **string(비어있으면 400 "content must not be empty") 또는 파트 배열**(아래 vision), `max_tokens`/`max_completion_tokens`(1~65536; 서버가 `max_tokens`→`max_completion_tokens`로 정규화), `temperature`(0~2), `top_p`(0~1), `frequency_penalty`/`presence_penalty`(−2~2), `stop`(**2026-07 중순 신규 인식** — 비어있지 않은 string 또는 1~4개 배열, 위반 시 400), `reasoning_effort`(enum `none/minimal/high/max`, 서버 기본 `none`), `stream`(bool — MCP는 미노출). **서버는 strict가 아님**: `tools`/`n`/`seed`/`response_format`/`logprobs`/`logit_bias`/`tool_choice`/`stream_options` 등 미인식 필드는 그냥 무시됨(에러 없이 기능도 안 함 — 2026-07-15 재확인).
+- **Vision (2026-07 중순, 중요)**: content 파트 배열 지원 — 인식 타입은 **`text`와 `image_url` 뿐**(그 외 "unknown content part type" 400). 형태: `{type:"text", text:"…"}`(비어있으면 400) / `{type:"image_url", image_url:{url, detail?}}`. 빈 배열은 400. **모든 role에서 배열 허용**(system/assistant도 text 파트 OK). `url`은 **https URL과 `data:` URL 둘 다 허용**(chat은 미디어 엔드포인트와 달리 host 허용목록 없음 — 실측). 이미지는 **vision 모델 한정**(`bytedance/seed-2.0-mini`, constraints `{vision:true, maxImages:10, tokensPerImage:1298, baseTokens:100}`): 비전 아닌 모델(glm-5.2, `vision:false`)에 이미지 주면 업스트림이 제출 시점 400 거부(무과금, `provider.upstreamMessage`에 "Model do not support image input"). 서버측 검증: 요청당 이미지 ≤ maxImages("at most 10 images per request"), 업스트림 최소 변 14px. **`detail`은 업스트림 패스스루**(`low`/`high`/`auto` — 잘못된 값은 업스트림 400이 허용값 나열): 토큰 실측 seed-2.0-mini 기준 `low` ≈ prompt 98, `high`/`auto`/미지정 ≈ 1,390~1,396 → **이미지당 ~14배 비용 차이**. MCP는 detail을 free-form string으로 노출(벤더 검증 위임 — `aspect_ratio` 철학과 동일).
+- **플랫폼 주입 system 프롬프트**: 서버가 모든 chat 요청 앞에 자체 system 메시지(~280자, adult platform 고지)를 삽입 — request 기록의 `input.messages[0]`에 보이고(원본은 `originalBody`에 보존) prompt_tokens에 포함됨. 모델 constraints의 `baseTokens: 100`이 이 오버헤드(최소 프롬프트 실측 ~88-101 토큰).
 - **응답**: OpenAI 형식 `{id, object:"chat.completion", choices:[{message:{content,...}, finish_reason}], usage:{prompt_tokens, completion_tokens, total_tokens, credits_charged, completion_tokens_details.reasoning_tokens, prompt_tokens_details.cached_tokens}}`. **응답 `id`가 곧 request_id** — `/v1/requests`에 `domain:"text", action:"chat"`으로 기록되고 input echo + 전체 output이 남아 `xbrush_get_request`로 사후 회수 가능.
 - **게이트웨이 30초 한계 (중요)**: 엣지 게이트웨이(CloudFront)가 ~30초에 연결을 끊고 **HTML 504**를 반환(실측). 서버는 계속 처리·과금하며 결과는 request 기록으로 회수(`completed`면 output 존재, `failed`면 **자동 전액 환불** — `credits.refunded` 실측 확인). 클라이언트 처리: `TIMEOUT_CHAT` 35초(504를 수신하도록 30초보다 약간 김) + `handleApiError`가 JSON 아닌 504를 `GATEWAY_TIMEOUT`으로 매핑해 `list_requests`/`get_request` 복구 힌트 제공. 따라서 **reasoning_effort는 none/minimal 권장** — high/max는 30초를 쉽게 초과(minimal도 간헐 초과 실측).
-- **과금**: perToken (GLM 5.2: input 1.82 / output 5.72 / cached input 0.338 credits per 1M). 사소한 호출은 ~0.0001 credit.
-- `GET /v1/models/text` 같은 **카테고리별 models 엔드포인트 존재** — `/v1/models`(전체)에도 text 모델 포함이라 `xbrush_list_models`는 기존 전체 조회 + 클라 필터 유지.
+- **과금**: perToken (GLM 5.2: input 1.82 / output 5.72 / cached input 0.338 credits per 1M; seed-2.0-mini: 0.13 / 0.52 / 0.13 — GLM 대비 ~14배 저렴). 사소한 호출은 ~0.0001 credit.
+- `GET /v1/models/text` 같은 **카테고리별 models 엔드포인트 존재** — `/v1/models`(전체)에도 text 모델 포함이라 `xbrush_list_models`는 기존 전체 조회 + 클라 필터 유지. text 모델 `constraints`(`vision`/`maxImages`/`tokensPerImage`/`baseTokens`)는 `xbrush_list_models` 포맷터가 `vision (max 10 images, ~1298 tokens/image)` / `text-only`로 표시.
 
 ## Lip-sync — fabric-1.0 talking photo (2026-07)
 - `/v1/video/lip-sync` 검증은 **모델 무관 필드 superset** (model-aware 아님, 실측): `videoUrl`, `imageUrl`, `audioUrl`, `text`, `voiceId`, `duration`(1~60), `resolution`(enum `480p/720p`). 모델별 필수 조합은 후단에서 `INVALID_INPUT`으로 검사(예: "imageUrl is required for fabric-1.0 model").
@@ -140,7 +142,7 @@ npm test             # Vitest 전체 실행
 
 ## 테스트
 - **Vitest 4-tier**: `test/{schemas,services,tools,integration}/`
-- 현재 v2.8.0 기준 **351 케이스** 통과
+- 현재 v2.9.0 기준 **365 케이스** 통과
 - `npm test` / `npm run test:watch`
 - 통합 테스트는 axios mock 사용, 실 API 호출 없음
 - MCP Inspector 또는 Claude Code에서 수동 E2E

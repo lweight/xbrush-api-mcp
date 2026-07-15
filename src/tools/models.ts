@@ -35,16 +35,30 @@ function formatCredit(m: XBrushModel): string {
 
 /**
  * Video i2v models carry a `constraints` object describing their duration
- * range in seconds ({min,max,step,default}); other categories omit it.
+ * range in seconds ({min,max,step,default}); text chat models carry vision
+ * capability ({vision, maxImages, tokensPerImage}); other categories omit it.
  */
 function formatConstraints(m: XBrushModel): string {
   const c = m.constraints;
-  if (!c || (c.min == null && c.max == null)) return "";
-  const range = `${c.min ?? "?"}-${c.max ?? "?"}s`;
-  const extras: string[] = [];
-  if (c.step != null && c.step !== 1) extras.push(`step ${c.step}`);
-  if (c.default != null) extras.push(`default ${c.default}`);
-  return ` | duration ${range}${extras.length ? ` (${extras.join(", ")})` : ""}`;
+  if (!c) return "";
+  const parts: string[] = [];
+  if (c.min != null || c.max != null) {
+    const extras: string[] = [];
+    if (c.step != null && c.step !== 1) extras.push(`step ${c.step}`);
+    if (c.default != null) extras.push(`default ${c.default}`);
+    parts.push(
+      `duration ${c.min ?? "?"}-${c.max ?? "?"}s${extras.length ? ` (${extras.join(", ")})` : ""}`
+    );
+  }
+  if (c.vision === true) {
+    const extras: string[] = [];
+    if (c.maxImages != null) extras.push(`max ${c.maxImages} images`);
+    if (c.tokensPerImage != null) extras.push(`~${c.tokensPerImage} tokens/image`);
+    parts.push(`vision${extras.length ? ` (${extras.join(", ")})` : ""}`);
+  } else if (c.vision === false) {
+    parts.push("text-only");
+  }
+  return parts.length ? ` | ${parts.join(" | ")}` : "";
 }
 
 function formatModelsMarkdown(models: XBrushModel[]): string {
@@ -85,7 +99,8 @@ export function registerModelTools(server: McpServer): void {
       description: [
         "List available XBrush AI models with pricing info.",
         "Models span image (generate/edit/upscale/remove-bg/outpaint/moderate), video (i2v/upscale/lipsync/extend/retake/moderate), audio (tts/music/sound-effect), text (chat LLMs for xbrush_chat, priced per 1M tokens), and utility.",
-        "Video i2v entries include their duration constraints (min-max seconds, step, default).",
+        "Video i2v entries include their duration constraints (min-max seconds, step, default);",
+        "text entries flag vision-capable models (image input for xbrush_chat) vs text-only.",
         "Watermark has no dedicated model list — call it directly.",
         "",
         "Args:",

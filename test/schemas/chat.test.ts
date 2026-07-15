@@ -88,12 +88,168 @@ describe("ChatCompletionSchema", () => {
     ).toThrow();
   });
 
-  it("tools/stop 등 미지원 OpenAI 필드 거부 (strict)", () => {
+  it("tools/n/seed/response_format 등 미지원 OpenAI 필드 거부 (strict)", () => {
     expect(() =>
       ChatCompletionSchema.parse({ model: "m", messages: [MSG], tools: [] })
     ).toThrow();
     expect(() =>
-      ChatCompletionSchema.parse({ model: "m", messages: [MSG], stop: ["\n"] })
+      ChatCompletionSchema.parse({ model: "m", messages: [MSG], n: 2 })
     ).toThrow();
+    expect(() =>
+      ChatCompletionSchema.parse({ model: "m", messages: [MSG], seed: 42 })
+    ).toThrow();
+    expect(() =>
+      ChatCompletionSchema.parse({
+        model: "m",
+        messages: [MSG],
+        response_format: { type: "json_object" },
+      })
+    ).toThrow();
+  });
+
+  describe("stop (2026-07 신규 인식 필드)", () => {
+    it("문자열 1개 유효", () => {
+      const r = ChatCompletionSchema.parse({ model: "m", messages: [MSG], stop: "END" });
+      expect(r.stop).toBe("END");
+    });
+
+    it("배열 1~4개 유효", () => {
+      const r = ChatCompletionSchema.parse({
+        model: "m",
+        messages: [MSG],
+        stop: ["a", "b", "c", "d"],
+      });
+      expect(r.stop).toEqual(["a", "b", "c", "d"]);
+    });
+
+    it("빈 문자열/빈 배열/5개 초과/빈 원소 거부", () => {
+      expect(() =>
+        ChatCompletionSchema.parse({ model: "m", messages: [MSG], stop: "" })
+      ).toThrow();
+      expect(() =>
+        ChatCompletionSchema.parse({ model: "m", messages: [MSG], stop: [] })
+      ).toThrow();
+      expect(() =>
+        ChatCompletionSchema.parse({ model: "m", messages: [MSG], stop: ["a", "b", "c", "d", "e"] })
+      ).toThrow();
+      expect(() =>
+        ChatCompletionSchema.parse({ model: "m", messages: [MSG], stop: ["a", ""] })
+      ).toThrow();
+    });
+  });
+
+  describe("content 파트 배열 (2026-07 vision)", () => {
+    const IMG = {
+      type: "image_url" as const,
+      image_url: { url: "https://assets.xbrush.ai/x.png" },
+    };
+
+    it("text 파트만으로 유효", () => {
+      const r = ChatCompletionSchema.parse({
+        model: "m",
+        messages: [{ role: "user", content: [{ type: "text", text: "hi" }] }],
+      });
+      expect(Array.isArray(r.messages[0].content)).toBe(true);
+    });
+
+    it("text + image_url 혼합 유효 (detail 포함/생략)", () => {
+      const r = ChatCompletionSchema.parse({
+        model: "bytedance/seed-2.0-mini",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "What color?" },
+              IMG,
+              { type: "image_url", image_url: { url: "data:image/png;base64,AAAA", detail: "low" } },
+            ],
+          },
+        ],
+      });
+      const parts = r.messages[0].content as unknown[];
+      expect(parts).toHaveLength(3);
+    });
+
+    it("system/assistant 메시지도 파트 배열 허용", () => {
+      const r = ChatCompletionSchema.parse({
+        model: "m",
+        messages: [
+          { role: "system", content: [{ type: "text", text: "be brief" }] },
+          { role: "user", content: "hi" },
+          { role: "assistant", content: [{ type: "text", text: "ok" }] },
+          { role: "user", content: "bye" },
+        ],
+      });
+      expect(r.messages).toHaveLength(4);
+    });
+
+    it("빈 파트 배열 거부 (서버: content array must not be empty)", () => {
+      expect(() =>
+        ChatCompletionSchema.parse({ model: "m", messages: [{ role: "user", content: [] }] })
+      ).toThrow();
+    });
+
+    it("빈 문자열 content 거부 (서버: content must not be empty)", () => {
+      expect(() =>
+        ChatCompletionSchema.parse({ model: "m", messages: [{ role: "user", content: "" }] })
+      ).toThrow();
+    });
+
+    it("미인식 파트 타입 거부 (서버 인식: text/image_url 뿐)", () => {
+      expect(() =>
+        ChatCompletionSchema.parse({
+          model: "m",
+          messages: [{ role: "user", content: [{ type: "input_image", url: "x" }] }],
+        })
+      ).toThrow();
+    });
+
+    it("text 파트 빈 문자열/누락 거부", () => {
+      expect(() =>
+        ChatCompletionSchema.parse({
+          model: "m",
+          messages: [{ role: "user", content: [{ type: "text", text: "" }] }],
+        })
+      ).toThrow();
+      expect(() =>
+        ChatCompletionSchema.parse({
+          model: "m",
+          messages: [{ role: "user", content: [{ type: "text" }] }],
+        })
+      ).toThrow();
+    });
+
+    it("image_url 파트 url 누락/파트 미정의 필드 거부 (strict)", () => {
+      expect(() =>
+        ChatCompletionSchema.parse({
+          model: "m",
+          messages: [{ role: "user", content: [{ type: "image_url", image_url: {} }] }],
+        })
+      ).toThrow();
+      expect(() =>
+        ChatCompletionSchema.parse({
+          model: "m",
+          messages: [
+            {
+              role: "user",
+              content: [{ ...IMG, extra: 1 }],
+            },
+          ],
+        })
+      ).toThrow();
+      expect(() =>
+        ChatCompletionSchema.parse({
+          model: "m",
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "image_url", image_url: { url: "https://a/x.png", size: "big" } },
+              ],
+            },
+          ],
+        })
+      ).toThrow();
+    });
   });
 });

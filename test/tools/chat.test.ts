@@ -87,6 +87,7 @@ describe("xbrush_chat", () => {
       top_p: 0.9,
       frequency_penalty: 0.5,
       presence_penalty: -0.5,
+      stop: ["END", "\n\n"],
       reasoning_effort: "minimal",
     });
     const args = mockedApi.mock.calls.at(-1)![0] as any;
@@ -98,8 +99,31 @@ describe("xbrush_chat", () => {
       top_p: 0.9,
       frequency_penalty: 0.5,
       presence_penalty: -0.5,
+      stop: ["END", "\n\n"],
       reasoning_effort: "minimal",
     });
+  });
+
+  it("vision: content 파트 배열이 그대로 전달", async () => {
+    mockedApi.mockResolvedValueOnce(mockCompletion);
+    const visionMessages = [
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "What color is this image?" },
+          {
+            type: "image_url",
+            image_url: { url: "https://assets.xbrush.ai/x.png", detail: "low" },
+          },
+        ],
+      },
+    ];
+    await handlers.get("xbrush_chat")!({
+      model: "bytedance/seed-2.0-mini",
+      messages: visionMessages,
+    });
+    const args = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(args.data.messages).toEqual(visionMessages);
   });
 
   it("미지정 옵션 필드는 body에서 생략", async () => {

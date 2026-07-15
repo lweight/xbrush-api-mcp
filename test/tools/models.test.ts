@@ -108,4 +108,48 @@ describe("xbrush_list_models", () => {
     expect(text).toContain("720p=audio 0.52/noAudio 0.26");
     expect(text).not.toContain("[object Object]");
   });
+
+  it("video duration constraints 포맷", async () => {
+    const resp: XBrushModelsResponse = {
+      models: [
+        makeModel({
+          id: "seedance-2.0",
+          category: "video",
+          featureType: "i2v",
+          constraints: { min: 4, max: 15, step: 1, default: 5 },
+        }),
+      ],
+    };
+    mockedApi.mockResolvedValueOnce(resp);
+    const result = await handlers.get("xbrush_list_models")!({});
+    expect(result.content[0].text).toContain("duration 4-15s (default 5)");
+  });
+
+  it("text 모델 vision constraints 포맷 (vision true/false)", async () => {
+    const resp: XBrushModelsResponse = {
+      models: [
+        makeModel({
+          id: "bytedance/seed-2.0-mini",
+          category: "text",
+          featureType: "chat",
+          calType: "perToken",
+          creditInfo: { creditConfig: { inputPer1M: 0.13, outputPer1M: 0.52 } },
+          constraints: { vision: true, maxImages: 10, baseTokens: 100, tokensPerImage: 1298 },
+        }),
+        makeModel({
+          id: "z-ai/glm-5.2",
+          category: "text",
+          featureType: "chat",
+          calType: "perToken",
+          creditInfo: { creditConfig: { inputPer1M: 1.82, outputPer1M: 5.72 } },
+          constraints: { vision: false, baseTokens: 100 },
+        }),
+      ],
+    };
+    mockedApi.mockResolvedValueOnce(resp);
+    const result = await handlers.get("xbrush_list_models")!({});
+    const text = result.content[0].text;
+    expect(text).toContain("vision (max 10 images, ~1298 tokens/image)");
+    expect(text).toContain("text-only");
+  });
 });

@@ -1,5 +1,51 @@
 # Changelog
 
+## 2.9.0 — 2026-07-15
+
+**Breaking changes:** None. Plain-string `content` keeps working; this release adds vision content parts and `stop` on top. One tightening: empty-string message content is now rejected client-side, matching the server ("content must not be empty").
+
+The XBrush LLM lineup gained its first **vision-capable chat model** — `bytedance/seed-2.0-mini` (ByteDance, `constraints.vision: true`, max 10 images/request, ~1,298 tokens per image, and ~14x cheaper than GLM 5.2: input 0.13 / output 0.52 / cached 0.13 credits per 1M) — and `/v1/chat/completions` now understands OpenAI-style **multimodal content arrays**. Re-surveyed the endpoint live on `api.xbrush.run` (2026-07-15): recognized part types are exactly `text` and `image_url` ("unknown content part type" otherwise); `image_url.url` takes both https URLs **and** `data:` URLs (no host allowlist on this endpoint, unlike the media endpoints); the upstream vendor enforces a 14px minimum dimension and the per-request image cap with clear errors, and rejects image parts on non-vision models at submit time (400, not billed). `image_url.detail` (`low`/`high`/`auto`) is passed through to the vendor and is a real cost lever — measured ~98 prompt tokens with `low` vs ~1,390-1,396 with `high`/`auto`/omitted.
+
+`stop` also graduated from silently-ignored to a **recognized, validated field**: a non-empty string or an array of 1-4 non-empty strings (verified end-to-end: `stop:["5"]` halts "1 2 3 4 " before the 5). Still ignored by the server and therefore still not exposed: `tools`, `n`, `seed`, `response_format`, `logprobs`, `logit_bias`, `tool_choice`, `stream_options`. Roles (`system/user/assistant`), `reasoning_effort` (`none/minimal/high/max`), `max_tokens` (1-65536), the ~30s gateway limit, and the absence of an async variant are all unchanged.
+
+### Added
+
+- `xbrush_chat` — message `content` now accepts an array of `{type:"text", text}` / `{type:"image_url", image_url:{url, detail?}}` parts (vision input) in any role, alongside the existing plain string. `detail` is a free-form string (server/vendor validates — same anti-false-rejection stance as `aspect_ratio`), documented with the measured low-vs-high token costs.
+- `xbrush_chat` — `stop` parameter (string, or 1-4 strings).
+- `xbrush_list_models` — text entries now render vision capability from the new model `constraints`: `vision (max 10 images, ~1298 tokens/image)` vs `text-only`.
+
+### Fixed
+
+- `xbrush_chat` — empty-string message content is rejected at the schema (the server 400s it anyway; previously it was submitted and failed server-side).
+
+### Tests
+
+- 351 → 365 unit + integration tests pass (stop validation, content part shapes, strictness of parts, vision body pass-through, models vision/duration constraint rendering; refreshed the chat input-schema snapshot).
+
+## 2.8.0 — 2026-07-15
+
+_Backfilled summary (this and the three entries below were released without a changelog entry)._
+
+Added the **`xbrush_chat`** tool — the platform's first text-category model, `z-ai/glm-5.2` (perToken billing). OpenAI-compatible `POST /v1/chat/completions`, **synchronous by design** (the API has no async variant for it — the one exception to the async-only rule): `model`, `messages` (1-1000, string content), `max_tokens` (1-65536, server normalizes to `max_completion_tokens`), `temperature`, `top_p`, `frequency_penalty`/`presence_penalty`, `reasoning_effort` (`none/minimal/high/max`, default `none`). The edge gateway cuts connections at ~30s with an HTML 504 while the server keeps processing and billing — the client maps that to `GATEWAY_TIMEOUT` with recovery hints (`xbrush_list_requests` + `xbrush_get_request`; the chat response `id` doubles as the request id, and failed requests auto-refund), and `TIMEOUT_CHAT` is 35s so the 504 is actually received. `xbrush_get_request` learned to print chat output, and `xbrush_list_models` gained the text category. 21 tools total; 351 tests.
+
+## 2.7.0 — 2026-06-26
+
+_Backfilled summary._
+
+`xbrush_video_generate` gained the `checkImageReferences` guard: `@ImageN` tokens in `prompt`/`idea` refer to the **1-based position** in `image_urls` (frames included), not "the Nth reference" — a common LLM mistake. Out-of-range references or references pointing at a `first_frame`/`last_frame` role are rejected before submission with the actual position→role mapping to correct against.
+
+## 2.6.0 — 2026-06-26
+
+_Backfilled summary._
+
+Updated seedance 2.0 reference-to-video input to its final shape: `image_urls` elements are strings **or** `{url, role}` objects (`first_frame` / `last_frame` / `reference_image`), mixable, passed through verbatim to `imageUrls`. Verified live that objects echo unchanged into the model payload and that `image_url` (single) is not required alongside them. Also exposed `idea` (non-English prompt, server-translated), `resolution`, `aspect_ratio`, `generate_audio`, and `consistency_mode` on `xbrush_video_generate`.
+
+## 2.5.0 — 2026-06-25
+
+_Backfilled summary._
+
+`xbrush_video_generate`: added seedance 2.0 multi-reference input (`image_urls`, then still a plain string array), made `image_url` optional (t2v needs none), and replaced the wrong `5|10` duration literals with `int 1-20` — per-model ranges come from `xbrush_list_models` `constraints` (`{min,max,step,default}`) and are validated server-side (anti-false-rejection stance).
+
 ## 2.4.0 — 2026-06-23
 
 **Breaking changes:** None. Existing `resolution`/`aspect_ratio` sizing is unchanged; this only adds an escape hatch and relaxes the width/height guard for that one case.

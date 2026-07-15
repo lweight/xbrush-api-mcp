@@ -6,15 +6,73 @@ import { z } from "zod";
  * OpenAI-compatible request. Field names are passed to the API as-is (the
  * endpoint itself uses snake_case), so no camelCase mapping happens here.
  * Constraints below were reverse-engineered live from the endpoint's
- * validation errors (2026-07-15); the server normalizes `max_tokens` into
- * `max_completion_tokens` internally.
+ * validation errors (2026-07-15, re-surveyed same day for the vision update);
+ * the server normalizes `max_tokens` into `max_completion_tokens` internally.
+ *
+ * Vision (2026-07 update): `content` accepts either a plain string or an
+ * array of parts. Recognized part types are exactly `text` and `image_url`
+ * ("unknown content part type" otherwise). Image inputs work only on models
+ * whose constraints report vision:true (see xbrush_list_models category
+ * 'text'); non-vision models reject image parts at submit time (400, no
+ * billing). Both https URLs and data: URLs are accepted (no host allowlist
+ * on this endpoint, unlike the media endpoints). Upstream vendor limits:
+ * min image dimension 14px, at most `constraints.maxImages` images per
+ * request — both validated server-side with clear errors, so no client
+ * whitelist here. `image_url.detail` is passed through to the vendor
+ * (low/high/auto, OpenAI-style) and strongly affects billing: measured
+ * prompt_tokens ~98 with low vs ~1,390-1,396 with high/auto/omitted on
+ * seed-2.0-mini. Kept as free-form string — the vendor validates values.
  *
  * Not exposed on purpose:
  * - `stream`: MCP stdio tools return a single result; streaming has no wire.
- * - `stop` / `tools` / `n` / `seed` / `response_format`: unrecognized by the
- *   endpoint (it silently ignores unknown fields — it is NOT strict).
+ * - `tools` / `n` / `seed` / `response_format` / `logprobs` / `logit_bias` /
+ *   `tool_choice` / `stream_options`: unrecognized by the endpoint (it
+ *   silently ignores unknown fields — it is NOT strict). Re-checked
+ *   2026-07-15: still ignored. `stop` graduated to a recognized, validated
+ *   field and is exposed below.
  * - `max_completion_tokens`: redundant with `max_tokens`.
  */
+
+export const ChatTextPartSchema = z
+  .object({
+    type: z.literal("text"),
+    text: z
+      .string()
+      .min(1)
+      .max(1_000_000)
+      .describe("Text content (non-empty, up to 1,000,000 characters)."),
+  })
+  .strict();
+
+export const ChatImageUrlPartSchema = z
+  .object({
+    type: z.literal("image_url"),
+    image_url: z
+      .object({
+        url: z
+          .string()
+          .min(1)
+          .describe(
+            "Image as an https URL or a data: URL (base64). Minimum dimension 14px. " +
+              "Upload local files first with xbrush_file_upload and pass the CDN URL."
+          ),
+        detail: z
+          .string()
+          .optional()
+          .describe(
+            "Vision fidelity vs. cost, passed through to the model vendor: 'low', 'high', or 'auto'. " +
+              "'low' is drastically cheaper (~98 prompt tokens vs ~1,400 per image on seed-2.0-mini); " +
+              "omitted = vendor default (high-tier cost)."
+          ),
+      })
+      .strict(),
+  })
+  .strict();
+
+export const ChatContentPartSchema = z.discriminatedUnion("type", [
+  ChatTextPartSchema,
+  ChatImageUrlPartSchema,
+]);
 
 export const ChatMessageSchema = z
   .object({
@@ -22,9 +80,22 @@ export const ChatMessageSchema = z
       .enum(["system", "user", "assistant"])
       .describe("Message author: system (instructions), user, or assistant (prior model turns)."),
     content: z
-      .string()
-      .max(1_000_000)
-      .describe("Message text (up to 1,000,000 characters)."),
+      .union([
+        z
+          .string()
+          .min(1)
+          .max(1_000_000)
+          .describe("Plain message text (non-empty, up to 1,000,000 characters)."),
+        z
+          .array(ChatContentPartSchema)
+          .min(1)
+          .describe(
+            "Multimodal parts: {type:'text', text} and/or {type:'image_url', image_url:{url, detail?}}. " +
+              "Image parts require a vision-capable model (constraints.vision in xbrush_list_models, " +
+              "e.g. bytedance/seed-2.0-mini, max images per request in constraints.maxImages)."
+          ),
+      ])
+      .describe("Message content: a plain string, or an array of text/image_url parts (vision)."),
   })
   .strict();
 
@@ -33,7 +104,8 @@ export const ChatCompletionSchema = z
     model: z
       .string()
       .describe(
-        "LLM model ID (e.g. z-ai/glm-5.2). Use xbrush_list_models with category='text' to see options and per-token pricing."
+        "LLM model ID (e.g. z-ai/glm-5.2, bytedance/seed-2.0-mini). Use xbrush_list_models with " +
+          "category='text' to see options, per-token pricing, and vision support."
       ),
     messages: z
       .array(ChatMessageSchema)
@@ -73,6 +145,19 @@ export const ChatCompletionSchema = z
       .max(2)
       .optional()
       .describe("Penalize tokens already present (-2 to 2)."),
+    stop: z
+      .union([
+        z.string().min(1).describe("A single stop sequence (non-empty)."),
+        z
+          .array(z.string().min(1))
+          .min(1)
+          .max(4)
+          .describe("1-4 stop sequences (non-empty strings)."),
+      ])
+      .optional()
+      .describe(
+        "Stop sequence(s): generation halts before emitting any of these. A non-empty string or an array of 1-4."
+      ),
     reasoning_effort: z
       .enum(["none", "minimal", "high", "max"])
       .optional()

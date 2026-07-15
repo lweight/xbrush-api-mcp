@@ -59,24 +59,33 @@ export function registerChatTools(server: McpServer): void {
     {
       title: "Chat (LLM)",
       description: [
-        "Chat with an XBrush-hosted LLM (OpenAI-compatible chat completions, e.g. GLM 5.2).",
+        "Chat with an XBrush-hosted LLM (OpenAI-compatible chat completions, e.g. GLM 5.2, Seed 2.0 Mini).",
         "SYNCHRONOUS — returns the completion text directly; no request_id polling needed.",
         "The platform gateway cuts responses at ~30s, so keep outputs short: prefer the default",
         "reasoning_effort (none) or 'minimal' and a modest max_tokens. On a 504 gateway timeout the",
         "request usually STILL completes and bills server-side — recover the text with",
         "xbrush_list_requests + xbrush_get_request (failed requests are auto-refunded).",
         "",
+        "VISION: on vision-capable models (constraints.vision in xbrush_list_models, e.g.",
+        "bytedance/seed-2.0-mini), message content may be an array of parts mixing",
+        "{type:'text', text} and {type:'image_url', image_url:{url, detail?}}. url takes an https URL",
+        "(upload local files via xbrush_file_upload) or a data: URL; detail 'low' cuts image token",
+        "cost ~14x vs 'high'/'auto'/omitted. Max images per request = constraints.maxImages.",
+        "Non-vision models reject image parts (400, not billed).",
+        "",
         "Args:",
         "  model (string, required): e.g. z-ai/glm-5.2. See xbrush_list_models(category='text').",
-        "  messages (array, required): 1-1000 of {role: system|user|assistant, content: string ≤1M chars}.",
+        "  messages (array, required): 1-1000 of {role: system|user|assistant, content}. content is a",
+        "    string ≤1M chars, or an array of text/image_url parts (vision).",
         "  max_tokens (int, optional): 1-65536, includes reasoning tokens.",
         "  temperature (float, optional): 0-2.",
         "  top_p (float, optional): 0-1.",
         "  frequency_penalty / presence_penalty (float, optional): -2 to 2.",
+        "  stop (string | string[], optional): 1-4 stop sequences.",
         "  reasoning_effort (string, optional): none/minimal/high/max. Default: none (fastest).",
         "",
         "Billed per token (input/output/cached rates via xbrush_list_models). OpenAI params not",
-        "listed above (tools, stop, n, seed, response_format, stream) are not supported.",
+        "listed above (tools, n, seed, response_format, stream) are not supported.",
       ].join("\n"),
       inputSchema: ChatCompletionSchema,
       annotations: {
@@ -97,6 +106,7 @@ export function registerChatTools(server: McpServer): void {
         if (args.top_p !== undefined) body.top_p = args.top_p;
         if (args.frequency_penalty !== undefined) body.frequency_penalty = args.frequency_penalty;
         if (args.presence_penalty !== undefined) body.presence_penalty = args.presence_penalty;
+        if (args.stop !== undefined) body.stop = args.stop;
         if (args.reasoning_effort !== undefined) body.reasoning_effort = args.reasoning_effort;
 
         const response = await makeApiRequest<XBrushChatCompletionResponse>({

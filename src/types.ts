@@ -82,10 +82,16 @@ export interface XBrushModel {
     creditConfig?: Record<string, number | Record<string, number>>;
   };
   constraints?: {
+    // Video i2v: duration range in seconds.
     max?: number;
     min?: number;
     step?: number;
     default?: number;
+    // Text chat: vision capability (image input via content parts).
+    vision?: boolean;
+    maxImages?: number;
+    tokensPerImage?: number;
+    baseTokens?: number;
     [key: string]: unknown;
   };
 }
