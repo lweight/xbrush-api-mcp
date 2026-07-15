@@ -52,6 +52,15 @@ function formatRequestDetail(r: XBrushRequestDetail): string {
       if (typeof r.output.overallScore === "number")
         lines.push(`- Moderation score: ${r.output.overallScore}`);
     }
+    // Chat completions (domain text/action chat) — recover the text, e.g.
+    // after a gateway 504 cut the synchronous xbrush_chat response.
+    if (Array.isArray(r.output.choices) && r.output.choices.length > 0) {
+      const choice = r.output.choices[0];
+      const content = choice?.message?.content;
+      lines.push(`- Chat completion${choice?.finish_reason ? ` (finish: ${choice.finish_reason})` : ""}:`);
+      lines.push("");
+      lines.push(content ? content : "_(no content)_");
+    }
   }
 
   if (r.status === "failed" && r.error) {

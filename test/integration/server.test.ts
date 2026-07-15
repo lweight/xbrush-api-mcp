@@ -25,11 +25,12 @@ import { registerModelTools } from "../../src/tools/models.js";
 import { registerFileUploadTools } from "../../src/tools/file-upload.js";
 import { registerVideoTools } from "../../src/tools/video.js";
 import { registerAudioTools } from "../../src/tools/audio.js";
+import { registerChatTools } from "../../src/tools/chat.js";
 import { registerLipSyncTools } from "../../src/tools/lip-sync.js";
 import { registerWatermarkTools } from "../../src/tools/watermark.js";
 import { registerModerationTools } from "../../src/tools/moderation.js";
 import { registerVoiceTools } from "../../src/tools/voice.js";
-import type { XBrushAsyncResponse } from "../../src/types.js";
+import type { XBrushAsyncResponse, XBrushChatCompletionResponse } from "../../src/types.js";
 
 const mockedApi = vi.mocked(makeApiRequest);
 
@@ -54,6 +55,7 @@ beforeAll(async () => {
   registerImageTools(mcpServer);
   registerVideoTools(mcpServer);
   registerAudioTools(mcpServer);
+  registerChatTools(mcpServer);
   registerLipSyncTools(mcpServer);
   registerWatermarkTools(mcpServer);
   registerModerationTools(mcpServer);
@@ -80,13 +82,14 @@ afterAll(async () => {
 // ── 도구 등록 검증 ───────────────────────────────────────────────────
 
 describe("도구 등록", () => {
-  it("도구 20개 등록", () => {
-    expect(tools).toHaveLength(20);
+  it("도구 21개 등록", () => {
+    expect(tools).toHaveLength(21);
   });
 
   it("도구 이름 목록 일치", () => {
     const names = tools.map((t) => t.name).sort();
     expect(names).toEqual([
+      "xbrush_chat",
       "xbrush_check_health",
       "xbrush_content_moderate",
       "xbrush_file_upload",
@@ -123,6 +126,7 @@ describe("도구 등록", () => {
       "xbrush_tts_generate",
       "xbrush_music_generate",
       "xbrush_sound_effect_generate",
+      "xbrush_chat",
       "xbrush_video_lip_sync",
       "xbrush_video_extend",
       "xbrush_video_retake",
@@ -176,6 +180,11 @@ describe("도구 스키마 스냅샷", () => {
     expect(tool.inputSchema).toMatchSnapshot();
   });
 
+  it("xbrush_chat", () => {
+    const tool = tools.find((t) => t.name === "xbrush_chat")!;
+    expect(tool.inputSchema).toMatchSnapshot();
+  });
+
   it("xbrush_watermark_add", () => {
     const tool = tools.find((t) => t.name === "xbrush_watermark_add")!;
     expect(tool.inputSchema).toMatchSnapshot();
@@ -209,6 +218,29 @@ describe("MCP 프로토콜 동작", () => {
     const text = (result.content as Array<{ text: string }>)[0].text;
     expect(text).toContain("submitted (async)");
     expect(text).toContain("xbrush_get_request");
+  });
+
+  it("xbrush_chat — 동기 호출로 completion 텍스트 직접 반환", async () => {
+    const mockChat: XBrushChatCompletionResponse = {
+      id: "req" + "t".repeat(21),
+      object: "chat.completion",
+      model: "z-ai/glm-5.2",
+      choices: [{ index: 0, finish_reason: "stop", message: { role: "assistant", content: "OK" } }],
+      usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6, credits_charged: 0.0001 },
+    };
+    mockedApi.mockResolvedValueOnce(mockChat);
+
+    const result = await client.callTool({
+      name: "xbrush_chat",
+      arguments: {
+        model: "z-ai/glm-5.2",
+        messages: [{ role: "user", content: "Say OK" }],
+      },
+    });
+    expect(result.isError).toBeFalsy();
+    const text = (result.content as Array<{ text: string }>)[0].text;
+    expect(text).toContain("OK");
+    expect(text).not.toContain("submitted (async)"); // 동기 — request_id 폴링 불필요
   });
 
   it("Zod 검증 실패 → 에러 응답 (prompt 누락)", async () => {

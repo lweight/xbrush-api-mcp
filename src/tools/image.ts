@@ -37,6 +37,8 @@ const RESOLUTION_BASED_MODELS = new Set<string>([
   "seedream-4.0-edit",
   "seedream-4.5",
   "seedream-4.5-edit",
+  "seedream-5.0-pro",
+  "seedream-5.0-pro-edit",
   "nano-banana-pro",
   "nano-banana-pro-edit",
   "nano-banana-2",

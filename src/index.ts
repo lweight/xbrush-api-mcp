@@ -22,6 +22,7 @@ import { registerModelTools } from "./tools/models.js";
 import { registerFileUploadTools } from "./tools/file-upload.js";
 import { registerVideoTools } from "./tools/video.js";
 import { registerAudioTools } from "./tools/audio.js";
+import { registerChatTools } from "./tools/chat.js";
 import { registerLipSyncTools } from "./tools/lip-sync.js";
 import { registerWatermarkTools } from "./tools/watermark.js";
 import { registerModerationTools } from "./tools/moderation.js";
@@ -58,6 +59,7 @@ const reportUnmatched = applyDisableFilter(server, disabled);
 registerImageTools(server); // 4 tools: generate, edit, upscale, remove_bg
 registerVideoTools(server); // 4 tools: video_generate, video_upscale, video_extend, video_retake
 registerAudioTools(server); // 3 tools: tts_generate, music_generate, sound_effect_generate
+registerChatTools(server); // 1 tool:  chat (sync LLM — the async-only rule's lone exception)
 registerLipSyncTools(server); // 1 tool:  video_lip_sync
 registerWatermarkTools(server); // 1 tool:  watermark_add
 registerModerationTools(server); // 1 tool:  content_moderate

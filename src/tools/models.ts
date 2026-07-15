@@ -33,6 +33,20 @@ function formatCredit(m: XBrushModel): string {
   return "—";
 }
 
+/**
+ * Video i2v models carry a `constraints` object describing their duration
+ * range in seconds ({min,max,step,default}); other categories omit it.
+ */
+function formatConstraints(m: XBrushModel): string {
+  const c = m.constraints;
+  if (!c || (c.min == null && c.max == null)) return "";
+  const range = `${c.min ?? "?"}-${c.max ?? "?"}s`;
+  const extras: string[] = [];
+  if (c.step != null && c.step !== 1) extras.push(`step ${c.step}`);
+  if (c.default != null) extras.push(`default ${c.default}`);
+  return ` | duration ${range}${extras.length ? ` (${extras.join(", ")})` : ""}`;
+}
+
 function formatModelsMarkdown(models: XBrushModel[]): string {
   const lines: string[] = [];
 
@@ -50,7 +64,10 @@ function formatModelsMarkdown(models: XBrushModel[]): string {
     lines.push(`## ${category.charAt(0).toUpperCase() + category.slice(1)} (${list.length})`);
     lines.push("");
     for (const m of list) {
-      lines.push(`- **${m.id}** — ${m.name} | ${m.featureType} | ${formatCredit(m)}`);
+      const vendor = m.vendor ? ` (${m.vendor})` : "";
+      lines.push(
+        `- **${m.id}** — ${m.name}${vendor} | ${m.featureType} | ${formatCredit(m)}${formatConstraints(m)}`
+      );
     }
     lines.push("");
   }
@@ -67,11 +84,12 @@ export function registerModelTools(server: McpServer): void {
       title: "List Models",
       description: [
         "List available XBrush AI models with pricing info.",
-        "Models span image (generate/edit/upscale/remove-bg/outpaint/moderate), video (i2v/upscale/lipsync/extend/retake/moderate), audio (tts/music/sound-effect), and utility.",
+        "Models span image (generate/edit/upscale/remove-bg/outpaint/moderate), video (i2v/upscale/lipsync/extend/retake/moderate), audio (tts/music/sound-effect), text (chat LLMs for xbrush_chat, priced per 1M tokens), and utility.",
+        "Video i2v entries include their duration constraints (min-max seconds, step, default).",
         "Watermark has no dedicated model list — call it directly.",
         "",
         "Args:",
-        "  category (string, optional): 'image', 'video', 'audio', or 'utility'.",
+        "  category (string, optional): 'image', 'video', 'audio', 'text', or 'utility'.",
       ].join("\n"),
       inputSchema: ListModelsSchema,
       annotations: {

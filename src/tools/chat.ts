@@ -1,0 +1,114 @@
+/**
+ * Chat tool: xbrush_chat
+ *
+ * SYNCHRONOUS — the one exception to the async-only rule. /v1/chat/completions
+ * has no async variant (POST /v1/chat/completions/async → 404) and answers
+ * OpenAI-style in a single response. The platform edge gateway cuts the
+ * connection at ~30s with an HTML 504; the request keeps processing (and
+ * billing — failed requests are refunded) server-side, and its outcome stays
+ * retrievable via xbrush_get_request (the response `id` IS the request id,
+ * domain "text" / action "chat").
+ */
+
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { ChatCompletionSchema } from "../schemas/chat.js";
+import { TIMEOUT_CHAT } from "../constants.js";
+import type { XBrushChatCompletionResponse } from "../types.js";
+import {
+  buildToolResult,
+  handleToolError,
+  makeApiRequest,
+} from "../services/xbrush-client.js";
+
+export function formatChatCompletion(r: XBrushChatCompletionResponse): string {
+  const lines: string[] = [];
+  const choice = r.choices?.[0];
+  const content = choice?.message?.content;
+
+  lines.push(`# Chat completion — ${r.model ?? "unknown model"}`);
+  lines.push("");
+  lines.push(content ? content : "_(no content returned)_");
+  lines.push("");
+  lines.push("---");
+  if (choice?.finish_reason) {
+    lines.push(`- **Finish reason**: ${choice.finish_reason}`);
+  }
+
+  const u = r.usage;
+  if (u) {
+    const cached = u.prompt_tokens_details?.cached_tokens;
+    const reasoning = u.completion_tokens_details?.reasoning_tokens;
+    const prompt = `prompt ${u.prompt_tokens ?? "?"}${cached ? ` (cached ${cached})` : ""}`;
+    const completion = `completion ${u.completion_tokens ?? "?"}${reasoning ? ` (reasoning ${reasoning})` : ""}`;
+    lines.push(`- **Tokens**: ${prompt} · ${completion} · total ${u.total_tokens ?? "?"}`);
+    if (u.credits_charged != null) {
+      lines.push(`- **Credits charged**: ${u.credits_charged}`);
+    }
+  }
+
+  if (r.id) {
+    lines.push(`- **Request ID**: \`${r.id}\` (also retrievable later via xbrush_get_request)`);
+  }
+
+  return lines.join("\n");
+}
+
+export function registerChatTools(server: McpServer): void {
+  server.registerTool(
+    "xbrush_chat",
+    {
+      title: "Chat (LLM)",
+      description: [
+        "Chat with an XBrush-hosted LLM (OpenAI-compatible chat completions, e.g. GLM 5.2).",
+        "SYNCHRONOUS — returns the completion text directly; no request_id polling needed.",
+        "The platform gateway cuts responses at ~30s, so keep outputs short: prefer the default",
+        "reasoning_effort (none) or 'minimal' and a modest max_tokens. On a 504 gateway timeout the",
+        "request usually STILL completes and bills server-side — recover the text with",
+        "xbrush_list_requests + xbrush_get_request (failed requests are auto-refunded).",
+        "",
+        "Args:",
+        "  model (string, required): e.g. z-ai/glm-5.2. See xbrush_list_models(category='text').",
+        "  messages (array, required): 1-1000 of {role: system|user|assistant, content: string ≤1M chars}.",
+        "  max_tokens (int, optional): 1-65536, includes reasoning tokens.",
+        "  temperature (float, optional): 0-2.",
+        "  top_p (float, optional): 0-1.",
+        "  frequency_penalty / presence_penalty (float, optional): -2 to 2.",
+        "  reasoning_effort (string, optional): none/minimal/high/max. Default: none (fastest).",
+        "",
+        "Billed per token (input/output/cached rates via xbrush_list_models). OpenAI params not",
+        "listed above (tools, stop, n, seed, response_format, stream) are not supported.",
+      ].join("\n"),
+      inputSchema: ChatCompletionSchema,
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async (args) => {
+      try {
+        const body: Record<string, unknown> = {
+          model: args.model,
+          messages: args.messages,
+        };
+        if (args.max_tokens !== undefined) body.max_tokens = args.max_tokens;
+        if (args.temperature !== undefined) body.temperature = args.temperature;
+        if (args.top_p !== undefined) body.top_p = args.top_p;
+        if (args.frequency_penalty !== undefined) body.frequency_penalty = args.frequency_penalty;
+        if (args.presence_penalty !== undefined) body.presence_penalty = args.presence_penalty;
+        if (args.reasoning_effort !== undefined) body.reasoning_effort = args.reasoning_effort;
+
+        const response = await makeApiRequest<XBrushChatCompletionResponse>({
+          method: "POST",
+          url: "/v1/chat/completions",
+          data: body,
+          timeout: TIMEOUT_CHAT,
+        });
+        return buildToolResult(formatChatCompletion(response));
+      } catch (error) {
+        return handleToolError(error);
+      }
+    }
+  );
+}

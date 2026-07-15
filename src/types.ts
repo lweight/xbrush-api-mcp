@@ -48,6 +48,8 @@ export interface XBrushOutput {
   regionsMasked?: number;
   processedImageUrl?: string;
   processedVideoUrl?: string;
+  // Chat outputs (domain "text" / action "chat")
+  choices?: XBrushChatChoice[];
   [key: string]: unknown;
 }
 
@@ -72,6 +74,7 @@ export interface XBrushModel {
   category: string;
   featureType: string;
   calType: string;
+  vendor?: string;
   creditInfo: {
     creditValue?: number;
     // Flat (`{ "1K": 0.1 }`) or nested (`{ "720p": { audio: 0.5, noAudio: 0.2 } }`)
@@ -89,6 +92,51 @@ export interface XBrushModel {
 
 export interface XBrushModelsResponse {
   models: XBrushModel[];
+}
+
+// ── Chat completions (POST /v1/chat/completions — sync only) ─────────
+// OpenAI-compatible response. The `id` doubles as an XBrush request id
+// (domain "text" / action "chat" in /v1/requests).
+
+export interface XBrushChatMessage {
+  role?: string;
+  content?: string | null;
+  reasoning_content?: string | null;
+  [key: string]: unknown;
+}
+
+export interface XBrushChatChoice {
+  index?: number;
+  finish_reason?: string | null;
+  message?: XBrushChatMessage;
+  [key: string]: unknown;
+}
+
+export interface XBrushChatUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  /** Credits billed for this call (perToken pricing). */
+  credits_charged?: number;
+  completion_tokens_details?: {
+    reasoning_tokens?: number | null;
+    [key: string]: unknown;
+  } | null;
+  prompt_tokens_details?: {
+    cached_tokens?: number | null;
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
+}
+
+export interface XBrushChatCompletionResponse {
+  id?: string;
+  object?: string;
+  created?: number;
+  model?: string;
+  choices?: XBrushChatChoice[];
+  usage?: XBrushChatUsage;
+  [key: string]: unknown;
 }
 
 // ── Request list ──────────────────────────────────────────────────────

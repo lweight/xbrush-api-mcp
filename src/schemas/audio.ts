@@ -44,7 +44,7 @@ export const MusicGenerateSchema = z
     model: z
       .string()
       .optional()
-      .describe("Music model ID (e.g. lyria2). Optional — server picks a default."),
+      .describe("Music model ID (e.g. lyria2, lyria3, lyria3-pro). Optional — server picks a default."),
     prompt: NonBlankString.describe("Text description of the music to generate."),
     duration: z
       .number()
@@ -62,19 +62,33 @@ export const MusicGenerateSchema = z
   .strict();
 
 /**
- * Sound-effect generation is a video-to-audio task — the server generates
- * foley / ambient audio appropriate to the supplied video. The optional
- * `prompt` biases the sound design.
+ * Sound-effect generation. `video_url` is required by the endpoint for EVERY
+ * model (verified live 2026-07-15 — even the text-driven soundeffect-text
+ * models reject a prompt-only request with videoUrl REQUIRED). Video-driven
+ * models (pixverse-sound-effects) design sound from the visuals; text-driven
+ * models (elevenlabs-sound-effects, stable-audio-sfx) lean on `prompt`.
  */
 export const SoundEffectGenerateSchema = z
   .object({
+    model: z
+      .string()
+      .optional()
+      .describe(
+        "Sound-effect model ID: pixverse-sound-effects (video-driven), elevenlabs-sound-effects / stable-audio-sfx (text-driven — describe the sound in prompt). Server default if omitted."
+      ),
     video_url: z
       .string()
       .url()
-      .describe("URL of the source video to generate sound effects for."),
+      .describe("URL of the source video. Required for all models (even text-driven ones)."),
     prompt: z
       .string()
       .optional()
-      .describe("Optional text description biasing the sound (e.g. 'gentle rain on leaves')."),
+      .describe("Text description of the sound (e.g. 'gentle rain on leaves'). Main input for text-driven models; a bias hint for video-driven ones."),
+    duration: z
+      .number()
+      .min(1)
+      .max(30)
+      .optional()
+      .describe("Sound duration in seconds (1-30)."),
   })
   .strict();

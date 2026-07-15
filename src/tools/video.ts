@@ -88,7 +88,7 @@ export function registerVideoTools(server: McpServer): void {
         "Submits async — poll the returned request_id with xbrush_get_request (typical wait 2-10 min).",
         "",
         "Args:",
-        "  model (string, required): Video model ID (e.g. kling, wan, veo3, seedance-2.0). Use xbrush_list_models(category='video').",
+        "  model (string, required): Video model ID (e.g. kling-v3-pro, kling-o3, veo3.1, seedance-2.0, hailuo-02-pro, wan-2.7-video). Use xbrush_list_models(category='video') — entries include per-model duration constraints.",
         "  image_url (string, optional): Start image (first frame) for image-to-video. Not needed for text-to-video or reference-to-video.",
         "  image_urls (array, optional): Reference images for reference-to-video models (seedance-2.0/-fast). Each item is a URL string OR an object {url, role} where role is first_frame/last_frame/reference_image — so one call can combine a start frame, an end frame, and subject references. NUMBERING: in prompt/idea, @ImageN = the N-th item here by 1-based ARRAY POSITION, counting first_frame/last_frame too (NOT 'the N-th reference'). E.g. [last_frame, reference_image] → the reference is @Image2. image_url is not required when this is set.",
         "  prompt (string, optional): ENGLISH motion/action description, sent to the model as-is. Reference an image_urls item as @ImageN (N = its 1-based position in image_urls). Use 'idea' instead for non-English text. Provide prompt or idea for text-to-video.",

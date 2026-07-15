@@ -67,7 +67,7 @@ export function registerAudioTools(server: McpServer): void {
     {
       title: "Generate Music",
       description: [
-        "Generate music from a text prompt using an XBrush music model (e.g. lyria2).",
+        "Generate music from a text prompt using an XBrush music model (e.g. lyria2, lyria3, lyria3-pro).",
         "Submits async — generation typically takes tens of seconds to minutes. Poll with xbrush_get_request.",
         "",
         "Args:",
@@ -110,12 +110,16 @@ export function registerAudioTools(server: McpServer): void {
       title: "Generate Sound Effect",
       description: [
         "Generate foley / ambient sound effects for a given video.",
-        "Takes a source video URL and returns audio appropriate to its visual content.",
+        "Video-driven models (pixverse-sound-effects) design sound from the visuals; text-driven",
+        "models (elevenlabs-sound-effects, stable-audio-sfx) generate from prompt — but video_url",
+        "is required for every model.",
         "Submits async — poll the returned request_id with xbrush_get_request.",
         "",
         "Args:",
-        "  video_url (string, required): Source video URL.",
-        "  prompt (string, optional): Text hint biasing the sound design.",
+        "  video_url (string, required): Source video URL (required even for text-driven models).",
+        "  prompt (string, optional): Sound description — main input for text-driven models.",
+        "  model (string, optional): Sound-effect model ID. Server default if omitted.",
+        "  duration (number, optional): Seconds (1-30).",
       ].join("\n"),
       inputSchema: SoundEffectGenerateSchema,
       annotations: {
@@ -130,6 +134,8 @@ export function registerAudioTools(server: McpServer): void {
         videoUrl: args.video_url,
       };
       if (args.prompt !== undefined) body.prompt = args.prompt;
+      if (args.model !== undefined) body.model = args.model;
+      if (args.duration !== undefined) body.duration = args.duration;
 
       return submitAsync({
         url: "/v1/sound-effect/generate",

@@ -10,15 +10,16 @@
 
 ```
 src/
-├── index.ts              ← 서버 엔트리, 10개 도구 모듈 등록
+├── index.ts              ← 서버 엔트리, 11개 도구 모듈 등록
 ├── constants.ts          ← API 베이스 URL, 타임아웃 상수, 응답 크기 한도
 ├── types.ts              ← 공통 타입 정의
 ├── tool-filter.ts        ← XBRUSH_DISABLED_TOOLS 환경변수 처리
 ├── schemas/              ← Zod 입력 스키마
 │   ├── audio.ts          ← tts / music / sound-effect
+│   ├── chat.ts           ← chat completions (LLM)
 │   ├── file-upload.ts
 │   ├── image.ts
-│   ├── lip-sync.ts
+│   ├── lip-sync.ts       ← 영상/사진(talking photo) lip-sync
 │   ├── models.ts
 │   ├── moderation.ts     ← content_moderate (image/video)
 │   ├── requests.ts
@@ -31,6 +32,7 @@ src/
 │   └── xbrush-client.ts  ← HTTP 클라이언트 + 에러 매핑 + 기본 포맷터
 └── tools/                ← MCP 도구 핸들러
     ├── audio.ts          ← tts_generate, music_generate, sound_effect_generate
+    ├── chat.ts           ← xbrush_chat (동기 LLM — async-only 규칙의 유일한 예외)
     ├── file-upload.ts    ← xbrush_file_upload
     ├── image.ts          ← generate, edit, upscale, remove_bg
     ├── lip-sync.ts       ← xbrush_video_lip_sync
@@ -66,6 +68,7 @@ npm test             # Vitest 전체 실행
   - `TIMEOUT_ASYNC_POST`: 30초 (async POST 제출)
   - `TIMEOUT_GET`: 10초 (GET 요청)
   - `TIMEOUT_UPLOAD`: 180초 (파일 업로드 본문 전송)
+  - `TIMEOUT_CHAT`: 35초 (동기 chat completions — 아래 "LLM chat" 참고)
 - **입력 검증**: Zod strict mode (미정의 필드 거부)
 - **Tool annotations**: `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` 명시
 - **생성 도구의 `idempotentHint`는 반드시 false** — 중복 과금 방지
@@ -75,11 +78,30 @@ npm test             # Vitest 전체 실행
 - 사유: `/sync` 엔드포인트가 처리시간 초과 시 `{ syncCompleted: false, status: "pending", output: undefined }`를 HTTP 202로 반환하는 dual-shape contract여서 client 처리가 복잡해지고, MCP stdio 도구는 장시간 블록되면 client timeout 위험이 큼.
 - 모든 도구 호출 → `request_id` 반환 → `xbrush_get_request(request_id)`로 폴링.
 - 스키마에 `sync` 필드 없음. 전달 시 strict 모드로 거부됨.
+- **유일한 예외: `xbrush_chat`** — `/v1/chat/completions`는 서버에 async 변형이 없어(`/async` 404) 동기 호출. 아래 "LLM chat" 참고.
+
+## LLM chat — `xbrush_chat` (동기 예외, 중요)
+- **엔드포인트**: `POST /v1/chat/completions` (OpenAI 호환). **동기 전용** — async 변형 없음. 2026-07 `text` 카테고리(`z-ai/glm-5.2`, featureType `chat`, calType `perToken`)와 함께 추가됨.
+- **요청 필드** (2026-07-15 역추적): `model`(필수), `messages`(필수, 1~1000개, `{role: system|user|assistant, content: ≤1,000,000자}`), `max_tokens`/`max_completion_tokens`(1~65536; 서버가 `max_tokens`→`max_completion_tokens`로 정규화), `temperature`(0~2), `top_p`(0~1), `frequency_penalty`/`presence_penalty`(−2~2), `reasoning_effort`(enum `none/minimal/high/max`, 서버 기본 `none`), `stream`(bool — MCP는 미노출). **서버는 strict가 아님**: `stop`/`tools`/`n`/`seed`/`response_format` 등 미인식 필드는 그냥 무시됨(에러 없이 기능도 안 함).
+- **응답**: OpenAI 형식 `{id, object:"chat.completion", choices:[{message:{content,...}, finish_reason}], usage:{prompt_tokens, completion_tokens, total_tokens, credits_charged, completion_tokens_details.reasoning_tokens, prompt_tokens_details.cached_tokens}}`. **응답 `id`가 곧 request_id** — `/v1/requests`에 `domain:"text", action:"chat"`으로 기록되고 input echo + 전체 output이 남아 `xbrush_get_request`로 사후 회수 가능.
+- **게이트웨이 30초 한계 (중요)**: 엣지 게이트웨이(CloudFront)가 ~30초에 연결을 끊고 **HTML 504**를 반환(실측). 서버는 계속 처리·과금하며 결과는 request 기록으로 회수(`completed`면 output 존재, `failed`면 **자동 전액 환불** — `credits.refunded` 실측 확인). 클라이언트 처리: `TIMEOUT_CHAT` 35초(504를 수신하도록 30초보다 약간 김) + `handleApiError`가 JSON 아닌 504를 `GATEWAY_TIMEOUT`으로 매핑해 `list_requests`/`get_request` 복구 힌트 제공. 따라서 **reasoning_effort는 none/minimal 권장** — high/max는 30초를 쉽게 초과(minimal도 간헐 초과 실측).
+- **과금**: perToken (GLM 5.2: input 1.82 / output 5.72 / cached input 0.338 credits per 1M). 사소한 호출은 ~0.0001 credit.
+- `GET /v1/models/text` 같은 **카테고리별 models 엔드포인트 존재** — `/v1/models`(전체)에도 text 모델 포함이라 `xbrush_list_models`는 기존 전체 조회 + 클라 필터 유지.
+
+## Lip-sync — fabric-1.0 talking photo (2026-07)
+- `/v1/video/lip-sync` 검증은 **모델 무관 필드 superset** (model-aware 아님, 실측): `videoUrl`, `imageUrl`, `audioUrl`, `text`, `voiceId`, `duration`(1~60), `resolution`(enum `480p/720p`). 모델별 필수 조합은 후단에서 `INVALID_INPUT`으로 검사(예: "imageUrl is required for fabric-1.0 model").
+- **fabric-1.0 / fabric-1.0-fast** (VEED): **정지 사진(`imageUrl`)을 말하는 얼굴로 애니메이션**(talking photo). 음성은 `audioUrl` 또는 **내장 TTS**(`text`+`voiceId`). 기존 영상 기반은 pixverse-lipsync / infinite-talk(`videoUrl`).
+- MCP 스키마는 전 필드 optional + 핸들러에서 모델 무관 최소치만 가드(얼굴 입력 video_url|image_url 중 1개, 음성 입력 audio_url|text 중 1개). 모델별 요구는 서버 위임(클라 화이트리스트 지양).
+- fabric은 audio 카테고리에도 lipsync로 중복 등재되어 있으나 엔드포인트는 동일 `/v1/video/lip-sync`.
+
+## Sound effect — 텍스트 기반 모델 (2026-07)
+- 신규 featureType `soundeffect-text`: `elevenlabs-sound-effects`, `stable-audio-sfx` — prompt가 주 입력. 단 **`videoUrl`은 모델 무관 endpoint 필수**(prompt-only는 400 REQUIRED, 실측 — 조건부 아님).
+- 인식 필드: `model`, `videoUrl`(필수), `prompt`, `duration`(1~30). `seed`/`text`는 미인식.
 
 ## 이미지 크기 지정 (모델 calType별, 중요)
 - 이미지 모델은 `calType`에 따라 출력 크기 지정 방식이 다름:
   - **`perMegapixel` / `perImage`** (`flux.*`, `z-image-turbo`, `qwen-image-edit` 등) → `width`/`height` 사용.
-  - **`byResolution` / `byResolutionAndQuality`** (`gpt-image-2`, `seedream-4.0/4.5`, `nano-banana-pro`, `nano-banana-2` + 각 `-edit`) → `resolution`(예: `"1K"`/`"2K"`/`"4K"`) + `aspect_ratio`(예: `"16:9"`) 사용. **`width`/`height`는 무시됨** (서버가 모델 전달 전 드롭 — 실측 확인). **단 `aspect_ratio:"custom"`이면 예외** — 아래 "임의 픽셀 사이즈(custom)" 참고.
+  - **`byResolution` / `byResolutionAndQuality`** (`gpt-image-2`, `seedream-4.0/4.5/5.0-pro`, `nano-banana-pro`, `nano-banana-2` + 각 `-edit`) → `resolution`(예: `"1K"`/`"2K"`/`"4K"`) + `aspect_ratio`(예: `"16:9"`) 사용. **`width`/`height`는 무시됨** (서버가 모델 전달 전 드롭 — 실측 확인). **단 `aspect_ratio:"custom"`이면 예외** — 아래 "임의 픽셀 사이즈(custom)" 참고.
   - `gpt-image-2`/`-edit`(byResolutionAndQuality)만 `quality`(low/medium/high) 추가 지원. 미지정 시 서버 기본은 `high`(최고가).
 - `src/tools/image.ts`의 `RESOLUTION_BASED_MODELS`가 해상도 기반 모델에 `width`/`height`가 오면 제출 전 거부(런타임 가드). **예외: `aspect_ratio==="custom"`이면 통과**(임의 픽셀 사이즈 모드). 새 byResolution 모델 추가 시 이 상수를 `xbrush_list_models`의 calType과 맞춰 갱신.
 - **`gpt-image-2`/`-edit`가 받는 `aspect_ratio`** (2026-06 실측): `1K`/`2K`는 `1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1`(10종), `4K`는 `16:9, 9:16, 21:9, 1.91:1`(4종, wide만). 미지원 값 거부 방식이 해상도별로 다름 — `1K`/`2K`는 제출 `202` 후 처리 중 `failed`(과금되나 환불됨), `4K`는 제출 즉시 `400 VALIDATION_ERROR`. 서버 에러 메시지가 허용 목록을 그대로 반환하므로 새 비율은 미지원 값 1회 실호출로 역추적 가능. `aspect_ratio`/`resolution`은 free-form string으로 서버 미검증 통과(`quality`만 enum 검증)이고 모델·해상도·시점별로 목록이 달라 **클라이언트 화이트리스트 가드는 두지 않음**(false-rejection 위험) — describe로만 안내.
@@ -118,7 +140,7 @@ npm test             # Vitest 전체 실행
 
 ## 테스트
 - **Vitest 4-tier**: `test/{schemas,services,tools,integration}/`
-- 현재 v2.5.0 기준 **306 케이스** 통과
+- 현재 v2.8.0 기준 **351 케이스** 통과
 - `npm test` / `npm run test:watch`
 - 통합 테스트는 axios mock 사용, 실 API 호출 없음
 - MCP Inspector 또는 Claude Code에서 수동 E2E
@@ -135,9 +157,11 @@ npm publish --access public
 ## 규칙
 - 커밋 메시지: 한국어
 - Transport: stdio 전용
-- 도구 20개 (Image 4, Video 5, Audio 3, Utility 8)
+- 도구 21개 (Image 4, Video 5, Audio 3, Text 1, Utility 8)
   - Image: generate, edit, upscale, remove_bg
   - Video: generate, upscale, lip_sync, extend, retake
   - Audio: tts_generate, music_generate, sound_effect_generate
+  - Text: chat (동기 LLM)
   - Utility: content_moderate, watermark_add, list_models, list_voices, get_request, list_requests, file_upload, check_health
 - 미구현(차기): `voice_clone`(/v1/voice/clone), `lora_train`(/v1/lora/train) — 소비측 스펙 확정 후
+- utility 모델 `gpt-4.1-nano`(featureType `prompt_enhance`/`image_to_prompt`)는 **공개 엔드포인트 미발견** (2026-07-15: /v1/prompt/enhance, /v1/utility/*, /v1/image/describe 등 후보 전부 404) — 내부 기능(예: idea 번역/프롬프트 보강)으로 추정, 도구화 대상 아님

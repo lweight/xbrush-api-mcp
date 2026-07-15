@@ -1,6 +1,6 @@
 # @lweight/xbrush-api-mcp
 
-MCP server for the [XBrush](https://xbrush.ai) AI media generation API — images, video, speech, music, sound effects, lip-sync, video extend/retake, content moderation, and watermarks, directly from Claude Code.
+MCP server for the [XBrush](https://xbrush.ai) AI media generation API — images, video, speech, music, sound effects, lip-sync (incl. talking photos), video extend/retake, LLM chat, content moderation, and watermarks, directly from Claude Code.
 
 ## Quick Start
 
@@ -34,6 +34,8 @@ Add to your MCP settings:
 "Read this script aloud in Korean"
 "Create a 30-second upbeat synth track"
 "Extend this video by another 5 seconds"
+"Make this portrait photo say the following line"
+"Ask GLM 5.2 to summarize this paragraph"
 ```
 
 ## How results work
@@ -42,14 +44,19 @@ All generation tools submit **asynchronously** and return a `request_id`. Poll i
 `xbrush_get_request` until `status` is `completed`, then read the output URL(s).
 The blocking `/sync` endpoints are intentionally never called (see `CLAUDE.md`).
 
-## Available Tools (20)
+The one exception is `xbrush_chat` (LLM chat completions): it is **synchronous** and returns
+the completion text directly — the API has no async variant for it. Responses must fit the
+platform's ~30s gateway limit; if a 504 cuts the connection, the request keeps processing
+server-side and its result can be recovered via `xbrush_list_requests` + `xbrush_get_request`.
+
+## Available Tools (21)
 
 ### Image (4)
 
 | Tool | Description |
 |------|-------------|
-| `xbrush_image_generate` | Generate images from text (e.g. nano-banana-pro, seedream-4.5, flux.2-pro, z-image-turbo) |
-| `xbrush_image_edit` | Edit / inpaint (qwen-image-edit) or outpaint (flux-outpaint, qwen-outpaint) |
+| `xbrush_image_generate` | Generate images from text (e.g. seedream-5.0-pro, nano-banana-pro, flux.2-pro, gpt-image-2, z-image-turbo) |
+| `xbrush_image_edit` | Edit / inpaint (qwen-image-edit, seedream-5.0-pro-edit, flux.2-pro-edit) or outpaint (flux-outpaint, qwen-outpaint) |
 | `xbrush_image_upscale` | Upscale images (2x / 4x) |
 | `xbrush_image_remove_bg` | Remove background |
 
@@ -57,9 +64,9 @@ The blocking `/sync` endpoints are intentionally never called (see `CLAUDE.md`).
 
 | Tool | Description |
 |------|-------------|
-| `xbrush_video_generate` | Image-/text-/reference-to-video (e.g. kling-v3, veo3.1, seedance-2.0, hailuo-02, wan-2.5). seedance-2.0 supports multi-reference via `image_urls` + `@ImageN` prompts and model-specific `duration` (4–15s) |
+| `xbrush_video_generate` | Image-/text-/reference-to-video (e.g. kling-v3/o3, veo3.1, seedance-2.0, hailuo-02, wan-2.7). seedance-2.0 supports multi-reference via `image_urls` + `@ImageN` prompts and model-specific `duration` (4–15s) |
 | `xbrush_video_upscale` | Upscale videos (realesrgan, seedvr) |
-| `xbrush_video_lip_sync` | Lip-sync a face video to an audio track |
+| `xbrush_video_lip_sync` | Lip-sync a face video (pixverse-lipsync, infinite-talk) or animate a still portrait as a talking photo (fabric-1.0) — speech from audio or built-in TTS (`text` + `voice_id`) |
 | `xbrush_video_extend` | Extend an existing video by 1–20 seconds |
 | `xbrush_video_retake` | Regenerate a video variation up to a timestamp |
 
@@ -68,8 +75,14 @@ The blocking `/sync` endpoints are intentionally never called (see `CLAUDE.md`).
 | Tool | Description |
 |------|-------------|
 | `xbrush_tts_generate` | Text-to-speech (e.g. speech-2.8-hd, eleven-v3) |
-| `xbrush_music_generate` | Music generation from text (lyria2) |
-| `xbrush_sound_effect_generate` | Generate sound effects for a video |
+| `xbrush_music_generate` | Music generation from text (lyria2, lyria3, lyria3-pro) |
+| `xbrush_sound_effect_generate` | Generate sound effects for a video — video-driven (pixverse) or prompt-driven (elevenlabs, stable-audio) |
+
+### Text (1)
+
+| Tool | Description |
+|------|-------------|
+| `xbrush_chat` | LLM chat completions (e.g. GLM 5.2) — synchronous, OpenAI-compatible, billed per token |
 
 ### Utility (8)
 
@@ -77,7 +90,7 @@ The blocking `/sync` endpoints are intentionally never called (see `CLAUDE.md`).
 |------|-------------|
 | `xbrush_content_moderate` | NSFW moderation + masking for an image or video |
 | `xbrush_watermark_add` | Add the XBrush watermark to an image/video |
-| `xbrush_list_models` | List available AI models with pricing |
+| `xbrush_list_models` | List available AI models with pricing, vendor, and per-model duration constraints |
 | `xbrush_list_voices` | List TTS voices (use a `voice_id` with `tts_generate`) |
 | `xbrush_get_request` | Check status/result of an async operation |
 | `xbrush_list_requests` | List recent API requests |

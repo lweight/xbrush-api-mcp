@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const VideoGenerateSchema = z
   .object({
-    model: z.string().describe("Video model to use (e.g. kling-v2-1-pro, wan-v2-2-14b, veo3, seedance-2.0). Use xbrush_list_models with category='video' to see options."),
+    model: z.string().describe("Video model to use (e.g. kling-v3-pro, kling-o3, veo3.1, seedance-2.0, hailuo-02-pro, wan-2.7-video). Use xbrush_list_models with category='video' to see options and per-model duration constraints."),
     image_url: z.string().url().optional().describe("URL of the start image (first frame) for image-to-video. Optional — text-to-video (prompt only) and reference-to-video (image_urls) models don't need it. The selected model decides what is required."),
     prompt: z.string().optional().describe("Motion/action description in ENGLISH — sent to the model as-is. Use this when writing directly in English; for any non-English text use 'idea' instead (the server translates it). Reference an image_urls entry as @ImageN, where N is its 1-based position in the image_urls array (first_frame/last_frame count toward the position too). Provide prompt OR idea (required for text-to-video when no image is supplied)."),
     idea: z.string().optional().describe("Same purpose as prompt but for NON-English text (e.g. Korean): the server translates it before sending to the model. Use 'idea' for non-English, 'prompt' for English. Reference an image_urls entry as @ImageN, where N is its 1-based position in the image_urls array (first_frame/last_frame count toward the position too). Provide prompt OR idea."),

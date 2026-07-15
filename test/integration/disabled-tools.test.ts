@@ -20,6 +20,7 @@ import { registerModelTools } from "../../src/tools/models.js";
 import { registerFileUploadTools } from "../../src/tools/file-upload.js";
 import { registerVideoTools } from "../../src/tools/video.js";
 import { registerAudioTools } from "../../src/tools/audio.js";
+import { registerChatTools } from "../../src/tools/chat.js";
 import { registerLipSyncTools } from "../../src/tools/lip-sync.js";
 import { registerWatermarkTools } from "../../src/tools/watermark.js";
 import { registerModerationTools } from "../../src/tools/moderation.js";
@@ -43,6 +44,7 @@ async function spinServer(disabledRaw: string | undefined): Promise<{
   registerImageTools(mcpServer);
   registerVideoTools(mcpServer);
   registerAudioTools(mcpServer);
+  registerChatTools(mcpServer);
   registerLipSyncTools(mcpServer);
   registerWatermarkTools(mcpServer);
   registerModerationTools(mcpServer);
@@ -71,17 +73,17 @@ describe("XBRUSH_DISABLED_TOOLS 통합", () => {
     servers = [];
   });
 
-  it("환경변수 없으면 20개 모두 노출", async () => {
+  it("환경변수 없으면 21개 모두 노출", async () => {
     const s = await spinServer(undefined);
     servers.push(s);
-    expect(s.tools.map((t) => t.name).length).toBe(20);
+    expect(s.tools.map((t) => t.name).length).toBe(21);
   });
 
   it("단일 도구 비활성 → tools/list에서 제외", async () => {
     const s = await spinServer("xbrush_tts_generate");
     servers.push(s);
     const names = s.tools.map((t) => t.name);
-    expect(names.length).toBe(19);
+    expect(names.length).toBe(20);
     expect(names).not.toContain("xbrush_tts_generate");
     expect(names).toContain("xbrush_music_generate"); // 다른 도구는 살아있음
   });
@@ -90,7 +92,7 @@ describe("XBRUSH_DISABLED_TOOLS 통합", () => {
     const s = await spinServer("xbrush_tts_generate,xbrush_music_generate,xbrush_watermark_add");
     servers.push(s);
     const names = s.tools.map((t) => t.name);
-    expect(names.length).toBe(17);
+    expect(names.length).toBe(18);
     expect(names).not.toContain("xbrush_tts_generate");
     expect(names).not.toContain("xbrush_music_generate");
     expect(names).not.toContain("xbrush_watermark_add");
@@ -102,11 +104,12 @@ describe("XBRUSH_DISABLED_TOOLS 통합", () => {
     servers.push(s);
     const names = s.tools.map((t) => t.name);
     expect(names).not.toContain("xbrush_tts_generate");
-    expect(names.length).toBe(19);
+    expect(names.length).toBe(20);
   });
 
   it("모든 도구 비활성", async () => {
     const all = [
+      "xbrush_chat",
       "xbrush_check_health",
       "xbrush_content_moderate",
       "xbrush_file_upload",

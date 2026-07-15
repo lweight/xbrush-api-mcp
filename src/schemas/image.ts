@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const ImageGenerateSchema = z
   .object({
-    model: z.string().describe("Image model to use (e.g. z-image-turbo, flux-kontext). Use xbrush_list_models to see available models."),
+    model: z.string().describe("Image model to use (e.g. z-image-turbo, flux.2-pro, seedream-5.0-pro, nano-banana-pro). Use xbrush_list_models to see available models."),
     prompt: z.string().trim().min(1).describe("Text description of the image to generate."),
     n: z.number().int().min(1).max(8).optional().describe("Number of images to generate (1-8). Default: 1."),
     negative_prompt: z.string().optional().describe("Elements to exclude from the generated image."),
@@ -17,7 +17,7 @@ export const ImageGenerateSchema = z
 
 export const ImageEditSchema = z
   .object({
-    model: z.string().describe("Editing model. Inpaint: qwen-image-edit, nano-banana-edit. Outpaint: flux-outpaint, qwen-outpaint. Use xbrush_list_models(category='image')."),
+    model: z.string().describe("Editing model. Inpaint/instruct-edit: qwen-image-edit, nano-banana-edit, seedream-5.0-pro-edit, flux.2-pro-edit. Outpaint: flux-outpaint, qwen-outpaint. Use xbrush_list_models(category='image')."),
     prompt: z.string().trim().min(1).describe("Text instruction describing the desired edits."),
     image_url: z.string().url().describe("URL of the primary source image to edit (also the first reference)."),
     image_urls: z

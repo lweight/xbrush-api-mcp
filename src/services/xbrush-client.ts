@@ -135,6 +135,13 @@ function getSuggestion(code: string, status: number): string {
       return "Generation failed on the server. Try again or use a different model.";
     case "POLLER_ERROR":
       return "Polling error. Use xbrush_get_request to check the request status manually.";
+    case "GATEWAY_TIMEOUT":
+      return (
+        "The request may still be processing (and billing) server-side — find it with " +
+        "xbrush_list_requests and fetch its outcome with xbrush_get_request (failed requests " +
+        "are auto-refunded). For xbrush_chat, retry with a lower max_tokens and " +
+        "reasoning_effort 'none' or 'minimal' so the response fits the ~30s gateway limit."
+      );
     default:
       if (status === 429) return "Rate limit exceeded. Wait before retrying.";
       if (status >= 500) return "XBrush server error. Try again later.";
@@ -157,10 +164,23 @@ export function handleApiError(error: unknown): XBrushApiError {
       );
     }
 
+    // The edge gateway (CloudFront) cuts long requests at ~30s with an HTML
+    // 504 page instead of a JSON error body. Map it to a recovery hint.
+    if (status === 504) {
+      return new XBrushApiError(
+        504,
+        "GATEWAY_TIMEOUT",
+        "Gateway timeout: the API gateway dropped the connection (~30s limit) before the server finished.",
+        getSuggestion("GATEWAY_TIMEOUT", status)
+      );
+    }
+
+    const raw = typeof data === "string" ? data : JSON.stringify(data);
+    const snippet = raw && raw.length > 300 ? `${raw.slice(0, 300)}…` : raw;
     return new XBrushApiError(
       status,
       `HTTP_${status}`,
-      `API error (${status}): ${JSON.stringify(data)}`,
+      `API error (${status}): ${snippet}`,
       getSuggestion("", status)
     );
   }

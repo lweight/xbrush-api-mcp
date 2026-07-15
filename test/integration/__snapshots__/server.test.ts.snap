@@ -1,5 +1,93 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "properties": {
+    "frequency_penalty": {
+      "description": "Penalize frequent tokens (-2 to 2).",
+      "maximum": 2,
+      "minimum": -2,
+      "type": "number",
+    },
+    "max_tokens": {
+      "description": "Upper bound on generated tokens (1-65536), reasoning included. Keep modest — the response must finish within the ~30s gateway limit.",
+      "maximum": 65536,
+      "minimum": 1,
+      "type": "integer",
+    },
+    "messages": {
+      "description": "Conversation so far, oldest first (1-1000 messages). The completion answers the last user message.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "description": "Message text (up to 1,000,000 characters).",
+            "maxLength": 1000000,
+            "type": "string",
+          },
+          "role": {
+            "description": "Message author: system (instructions), user, or assistant (prior model turns).",
+            "enum": [
+              "system",
+              "user",
+              "assistant",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "role",
+          "content",
+        ],
+        "type": "object",
+      },
+      "maxItems": 1000,
+      "minItems": 1,
+      "type": "array",
+    },
+    "model": {
+      "description": "LLM model ID (e.g. z-ai/glm-5.2). Use xbrush_list_models with category='text' to see options and per-token pricing.",
+      "type": "string",
+    },
+    "presence_penalty": {
+      "description": "Penalize tokens already present (-2 to 2).",
+      "maximum": 2,
+      "minimum": -2,
+      "type": "number",
+    },
+    "reasoning_effort": {
+      "description": "Reasoning budget for reasoning-capable models. Server default: none (fastest). Higher efforts can exceed the ~30s gateway limit — prefer none/minimal here.",
+      "enum": [
+        "none",
+        "minimal",
+        "high",
+        "max",
+      ],
+      "type": "string",
+    },
+    "temperature": {
+      "description": "Sampling temperature (0-2). Higher = more random.",
+      "maximum": 2,
+      "minimum": 0,
+      "type": "number",
+    },
+    "top_p": {
+      "description": "Nucleus sampling probability mass (0-1).",
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number",
+    },
+  },
+  "required": [
+    "model",
+    "messages",
+  ],
+  "type": "object",
+}
+`;
+
 exports[`도구 스키마 스냅샷 > xbrush_file_upload 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
@@ -89,7 +177,7 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "type": "string",
     },
     "model": {
-      "description": "Editing model. Inpaint: qwen-image-edit, nano-banana-edit. Outpaint: flux-outpaint, qwen-outpaint. Use xbrush_list_models(category='image').",
+      "description": "Editing model. Inpaint/instruct-edit: qwen-image-edit, nano-banana-edit, seedream-5.0-pro-edit, flux.2-pro-edit. Outpaint: flux-outpaint, qwen-outpaint. Use xbrush_list_models(category='image').",
       "type": "string",
     },
     "n": {
@@ -154,7 +242,7 @@ exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
       "type": "integer",
     },
     "model": {
-      "description": "Image model to use (e.g. z-image-turbo, flux-kontext). Use xbrush_list_models to see available models.",
+      "description": "Image model to use (e.g. z-image-turbo, flux.2-pro, seedream-5.0-pro, nano-banana-pro). Use xbrush_list_models to see available models.",
       "type": "string",
     },
     "n": {
@@ -211,11 +299,12 @@ exports[`도구 스키마 스냅샷 > xbrush_list_models 1`] = `
   "additionalProperties": false,
   "properties": {
     "category": {
-      "description": "Filter by top-level category: image, video, audio, or utility. Omit to list all.",
+      "description": "Filter by top-level category: image, video, audio, text (chat LLMs), or utility. Omit to list all.",
       "enum": [
         "image",
         "video",
         "audio",
+        "text",
         "utility",
       ],
       "type": "string",
@@ -237,7 +326,7 @@ exports[`도구 스키마 스냅샷 > xbrush_music_generate 1`] = `
       "type": "integer",
     },
     "model": {
-      "description": "Music model ID (e.g. lyria2). Optional — server picks a default.",
+      "description": "Music model ID (e.g. lyria2, lyria3, lyria3-pro). Optional — server picks a default.",
       "type": "string",
     },
     "negative_prompt": {
@@ -303,24 +392,44 @@ exports[`도구 스키마 스냅샷 > xbrush_video_lip_sync 1`] = `
   "additionalProperties": false,
   "properties": {
     "audio_url": {
-      "description": "URL of the audio to lip-sync onto the video.",
+      "description": "URL of the speech audio to lip-sync. Alternative: text + voice_id (built-in TTS).",
+      "format": "uri",
+      "type": "string",
+    },
+    "duration": {
+      "description": "Output duration in seconds (1-60). Model default if omitted.",
+      "maximum": 60,
+      "minimum": 1,
+      "type": "number",
+    },
+    "image_url": {
+      "description": "URL of a still portrait photo to animate — talking photo (fabric-1.0/-fast). Provide video_url OR image_url.",
       "format": "uri",
       "type": "string",
     },
     "model": {
-      "description": "Lip-sync model ID (e.g. pixverse). Defaults to the server's default model.",
+      "description": "Lip-sync model ID: pixverse-lipsync / infinite-talk (video input), fabric-1.0 / fabric-1.0-fast (still-photo input, 'talking photo'). Defaults to the server's default model.",
+      "type": "string",
+    },
+    "resolution": {
+      "description": "Output resolution tier — currently "480p" or "720p" (higher costs more; e.g. fabric-1.0 480p 0.104 vs 720p 0.195 credits/sec). Server-validated.",
+      "minLength": 1,
+      "type": "string",
+    },
+    "text": {
+      "description": "Text to speak via built-in TTS instead of audio_url (use with voice_id; see xbrush_list_voices).",
       "type": "string",
     },
     "video_url": {
-      "description": "URL of the source video (face must be visible).",
+      "description": "URL of the source face video (video-driven models). Provide video_url OR image_url.",
       "format": "uri",
       "type": "string",
     },
+    "voice_id": {
+      "description": "Voice for built-in TTS when using text (from xbrush_list_voices).",
+      "type": "string",
+    },
   },
-  "required": [
-    "video_url",
-    "audio_url",
-  ],
   "type": "object",
 }
 `;
