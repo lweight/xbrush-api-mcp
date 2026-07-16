@@ -92,6 +92,12 @@ export interface XBrushModel {
     maxImages?: number;
     tokensPerImage?: number;
     baseTokens?: number;
+    // Text chat: function calling (tools) support — 2026-07-16.
+    functionCalling?: boolean;
+    /** Fixed input-token overhead billed per request whenever `tools` is present. */
+    toolsFixedTokens?: number;
+    /** Whether a forced tool_choice {type:"function"} is obeyed (glm-5.2: false). */
+    forcedChoiceHonored?: boolean;
     [key: string]: unknown;
   };
 }
@@ -104,10 +110,32 @@ export interface XBrushModelsResponse {
 // OpenAI-compatible response. The `id` doubles as an XBrush request id
 // (domain "text" / action "chat" in /v1/requests).
 
+export interface XBrushChatToolCall {
+  id?: string;
+  type?: string;
+  function?: {
+    name?: string;
+    /** JSON-encoded arguments string (OpenAI convention — not an object). */
+    arguments?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface XBrushChatMessage {
   role?: string;
   content?: string | null;
   reasoning_content?: string | null;
+  /** Present (with finish_reason "tool_calls") when the model requests function calls. */
+  tool_calls?: XBrushChatToolCall[] | null;
+  [key: string]: unknown;
+}
+
+/** Non-fatal request warnings, e.g. PARAM_NOT_HONORED when glm-5.2 ignores a forced tool_choice. */
+export interface XBrushChatWarning {
+  code?: string;
+  param?: string;
+  message?: string;
   [key: string]: unknown;
 }
 
@@ -142,6 +170,7 @@ export interface XBrushChatCompletionResponse {
   model?: string;
   choices?: XBrushChatChoice[];
   usage?: XBrushChatUsage;
+  warnings?: XBrushChatWarning[] | null;
   [key: string]: unknown;
 }
 

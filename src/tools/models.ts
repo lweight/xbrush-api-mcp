@@ -36,7 +36,9 @@ function formatCredit(m: XBrushModel): string {
 /**
  * Video i2v models carry a `constraints` object describing their duration
  * range in seconds ({min,max,step,default}); text chat models carry vision
- * capability ({vision, maxImages, tokensPerImage}); other categories omit it.
+ * capability ({vision, maxImages, tokensPerImage}) and function-calling
+ * support ({functionCalling, toolsFixedTokens, forcedChoiceHonored});
+ * other categories omit it.
  */
 function formatConstraints(m: XBrushModel): string {
   const c = m.constraints;
@@ -57,6 +59,16 @@ function formatConstraints(m: XBrushModel): string {
     parts.push(`vision${extras.length ? ` (${extras.join(", ")})` : ""}`);
   } else if (c.vision === false) {
     parts.push("text-only");
+  }
+  if (c.functionCalling === true) {
+    const extras: string[] = [];
+    if (c.toolsFixedTokens != null) extras.push(`~${c.toolsFixedTokens} fixed tokens/request`);
+    if (c.forcedChoiceHonored != null) {
+      extras.push(c.forcedChoiceHonored ? "forced choice honored" : "forced choice NOT honored");
+    }
+    parts.push(`function calling${extras.length ? ` (${extras.join(", ")})` : ""}`);
+  } else if (c.functionCalling === false) {
+    parts.push("no function calling");
   }
   return parts.length ? ` | ${parts.join(" | ")}` : "";
 }
@@ -100,7 +112,9 @@ export function registerModelTools(server: McpServer): void {
         "List available XBrush AI models with pricing info.",
         "Models span image (generate/edit/upscale/remove-bg/outpaint/moderate), video (i2v/upscale/lipsync/extend/retake/moderate), audio (tts/music/sound-effect), text (chat LLMs for xbrush_chat, priced per 1M tokens), and utility.",
         "Video i2v entries include their duration constraints (min-max seconds, step, default);",
-        "text entries flag vision-capable models (image input for xbrush_chat) vs text-only.",
+        "text entries flag vision-capable models (image input for xbrush_chat) vs text-only, plus",
+        "function-calling support (tools for xbrush_chat: fixed token overhead per request and",
+        "whether a forced tool_choice is honored — glm-5.2 does not honor it).",
         "Watermark has no dedicated model list — call it directly.",
         "",
         "Args:",

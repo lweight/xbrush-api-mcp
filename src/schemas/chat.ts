@@ -23,13 +23,29 @@ import { z } from "zod";
  * prompt_tokens ~98 with low vs ~1,390-1,396 with high/auto/omitted on
  * seed-2.0-mini. Kept as free-form string — the vendor validates values.
  *
+ * Function calling (2026-07-16, server-announced + re-verified live on prod):
+ * `tools` / `tool_choice` are now recognized (OpenAI format). The model
+ * answers with finish_reason "tool_calls" and message.tool_calls whose
+ * `function.arguments` is a JSON-encoded STRING. To continue, the assistant
+ * message is echoed back verbatim (tool_calls included; its content may be
+ * "" or null) followed by one {role:"tool", tool_call_id, content} message
+ * per call — the server 400s if any tool_call is left unanswered before the
+ * next user message. Server-enforced limits (clear 400s, so mirrored here
+ * only where documented as contract): ≤32 functions, function name
+ * ^[a-zA-Z0-9_-]{1,64}$, ≤32KB serialized tools (not client-checked).
+ * Models: constraints.functionCalling in xbrush_list_models; forced
+ * tool_choice is honored per constraints.forcedChoiceHonored (seed-2.0-mini
+ * yes, glm-5.2 no — glm picks its own tool and the response carries a
+ * top-level warnings[] entry {code:"PARAM_NOT_HONORED", param:"tool_choice"}).
+ *
  * Not exposed on purpose:
  * - `stream`: MCP stdio tools return a single result; streaming has no wire.
- * - `tools` / `n` / `seed` / `response_format` / `logprobs` / `logit_bias` /
- *   `tool_choice` / `stream_options`: unrecognized by the endpoint (it
- *   silently ignores unknown fields — it is NOT strict). Re-checked
- *   2026-07-15: still ignored. `stop` graduated to a recognized, validated
- *   field and is exposed below.
+ *   (stream + tools is also still unsupported server-side.)
+ * - `parallel_tool_calls`: server 400s on `false` ("not supported yet") —
+ *   models may emit several tool_calls per turn regardless; answer them all.
+ * - `n` / `seed` / `response_format` / `logprobs` / `logit_bias` /
+ *   `stream_options`: unrecognized by the endpoint (it silently ignores
+ *   unknown fields — it is NOT strict). Re-checked 2026-07-15.
  * - `max_completion_tokens`: redundant with `max_tokens`.
  */
 
@@ -74,18 +90,39 @@ export const ChatContentPartSchema = z.discriminatedUnion("type", [
   ChatImageUrlPartSchema,
 ]);
 
+export const ChatToolCallSchema = z
+  .object({
+    id: z
+      .string()
+      .min(1)
+      .describe("Tool call id exactly as the model returned it (e.g. call_abc123)."),
+    type: z.literal("function"),
+    function: z
+      .object({
+        name: z.string().min(1).describe("Function name as returned by the model."),
+        arguments: z
+          .string()
+          .describe("JSON-encoded arguments STRING (not an object), echoed back verbatim."),
+      })
+      .strict(),
+  })
+  .strict();
+
 export const ChatMessageSchema = z
   .object({
     role: z
-      .enum(["system", "user", "assistant"])
-      .describe("Message author: system (instructions), user, or assistant (prior model turns)."),
+      .enum(["system", "user", "assistant", "tool"])
+      .describe(
+        "Message author: system (instructions), user, assistant (prior model turns), or tool (a function result answering an assistant tool_call)."
+      ),
     content: z
       .union([
         z
           .string()
-          .min(1)
           .max(1_000_000)
-          .describe("Plain message text (non-empty, up to 1,000,000 characters)."),
+          .describe(
+            "Plain message text (up to 1,000,000 characters). Must be non-empty except on assistant messages that carry tool_calls."
+          ),
         z
           .array(ChatContentPartSchema)
           .min(1)
@@ -95,9 +132,112 @@ export const ChatMessageSchema = z
               "e.g. bytedance/seed-2.0-mini, max images per request in constraints.maxImages)."
           ),
       ])
-      .describe("Message content: a plain string, or an array of text/image_url parts (vision)."),
+      .nullable()
+      .optional()
+      .describe(
+        "Message content: a plain string, or an array of text/image_url parts (vision). " +
+          "Required (non-empty) on every message except an assistant message with tool_calls, " +
+          "where it may be empty, null, or omitted. For role:'tool' put the function's result here " +
+          "(commonly a JSON string)."
+      ),
+    tool_calls: z
+      .array(ChatToolCallSchema)
+      .min(1)
+      .optional()
+      .describe(
+        "Assistant messages only: the tool_calls array from a prior response, echoed back VERBATIM " +
+          "when returning function results."
+      ),
+    tool_call_id: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Tool messages only (required there): the id of the assistant tool_calls entry this message answers."
+      ),
+  })
+  .strict()
+  .superRefine((msg, ctx) => {
+    if (msg.tool_calls && msg.role !== "assistant") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tool_calls"],
+        message: "tool_calls is only valid on assistant messages.",
+      });
+    }
+    if (msg.role === "tool" && !msg.tool_call_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tool_call_id"],
+        message:
+          "tool messages require tool_call_id — the id of the assistant tool_calls entry being answered.",
+      });
+    }
+    if (msg.tool_call_id && msg.role !== "tool") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["tool_call_id"],
+        message: "tool_call_id is only valid on tool messages.",
+      });
+    }
+    const isToolCallTurn = msg.role === "assistant" && (msg.tool_calls?.length ?? 0) > 0;
+    if (!isToolCallTurn && (msg.content == null || msg.content === "")) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["content"],
+        message:
+          "content is required and must be non-empty (it may be empty/null only on an assistant message that carries tool_calls).",
+      });
+    }
+  });
+
+export const ChatToolSchema = z
+  .object({
+    type: z.literal("function"),
+    function: z
+      .object({
+        name: z
+          .string()
+          .regex(
+            /^[a-zA-Z0-9_-]{1,64}$/,
+            "function name must match ^[a-zA-Z0-9_-]{1,64}$ (server-enforced)"
+          )
+          .describe("Function name: 1-64 chars of letters, digits, _ or - (server-enforced)."),
+        description: z
+          .string()
+          .optional()
+          .describe("What the function does — helps the model decide when to call it."),
+        parameters: z
+          .record(z.unknown())
+          .optional()
+          .describe(
+            "JSON Schema object describing the function's arguments (OpenAI format). Omit for a no-argument function."
+          ),
+      })
+      .strict(),
   })
   .strict();
+
+export const ChatToolChoiceSchema = z.union([
+  z
+    .string()
+    .min(1)
+    .describe(
+      "'auto' (default — model decides), 'none' (suppress calls this turn), or 'required' " +
+        "(must call something; may yield an empty tool_calls response if no tool fits — prefer 'auto')."
+    ),
+  z
+    .object({
+      type: z.literal("function"),
+      function: z.object({ name: z.string().min(1) }).strict(),
+    })
+    .strict()
+    .describe(
+      "Force one specific function. Only models with constraints.forcedChoiceHonored obey this " +
+        "(bytedance/seed-2.0-mini yes; z-ai/glm-5.2 picks its own tool and the response carries a " +
+        "PARAM_NOT_HONORED warning)."
+    ),
+]);
 
 export const ChatCompletionSchema = z
   .object({
@@ -165,5 +305,20 @@ export const ChatCompletionSchema = z
         "Reasoning budget for reasoning-capable models. Server default: none (fastest). " +
           "Higher efforts can exceed the ~30s gateway limit — prefer none/minimal here."
       ),
+    tools: z
+      .array(ChatToolSchema)
+      .max(32)
+      .optional()
+      .describe(
+        "Function definitions the model may call (OpenAI format; ≤32 functions, ≤32KB serialized). " +
+          "Works on models with constraints.functionCalling in xbrush_list_models. Tool schemas are " +
+          "billed as input tokens on EVERY request plus a fixed per-model overhead " +
+          "(constraints.toolsFixedTokens) — omit on requests that don't need them."
+      ),
+    tool_choice: ChatToolChoiceSchema.optional().describe(
+      "How the model may use `tools`: 'auto' (default), 'none', 'required', or " +
+        "{type:'function', function:{name}} to force one function (models with " +
+        "constraints.forcedChoiceHonored only — glm-5.2 ignores it with a PARAM_NOT_HONORED warning)."
+    ),
   })
   .strict();

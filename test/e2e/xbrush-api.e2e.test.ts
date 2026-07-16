@@ -24,6 +24,7 @@ import { registerLipSyncTools } from "../../src/tools/lip-sync.js";
 import { registerWatermarkTools } from "../../src/tools/watermark.js";
 import { registerModerationTools } from "../../src/tools/moderation.js";
 import { registerVoiceTools } from "../../src/tools/voice.js";
+import { registerChatTools } from "../../src/tools/chat.js";
 
 const hasApiKey = !!process.env.XBRUSH_API_KEY;
 const paidOk = process.env.XBRUSH_E2E_PAID === "1";
@@ -45,6 +46,7 @@ beforeAll(async () => {
   registerModelTools(server);
   registerVoiceTools(server);
   registerFileUploadTools(server);
+  registerChatTools(server);
 
   client = new Client({ name: "e2e", version: "0" });
   const [ct, st] = InMemoryTransport.createLinkedPair();
@@ -370,6 +372,67 @@ describe.runIf(hasApiKey && paidOk)("유료 풀 파이프라인 (크레딧 소�
     const reqId = extractRequestId(r.text);
     const done = await pollUntilDone(reqId!, { maxMs: 10 * 60_000 });
     expect(["completed", "timeout"]).toContain(done.status);
+  });
+
+  it("15 chat function calling (seed-2.0-mini, 동기 2-turn 라운드트립)", async () => {
+    const tools = [
+      {
+        type: "function",
+        function: {
+          name: "get_weather",
+          description: "Get current weather for a city",
+          parameters: {
+            type: "object",
+            properties: { city: { type: "string" } },
+            required: ["city"],
+          },
+        },
+      },
+    ];
+    // Turn 1 — 모델이 tool call을 요청해야 함
+    const r1 = await callTool("xbrush_chat", {
+      model: "bytedance/seed-2.0-mini",
+      messages: [{ role: "user", content: "What is the weather in Seoul right now?" }],
+      tools,
+      max_tokens: 300,
+    });
+    if (r1.isError) console.warn("chat turn1:", r1.text.slice(0, 300));
+    expect(r1.isError).toBe(false);
+    expect(r1.text).toContain("Tool calls requested");
+    const callId = r1.text.match(/call_[a-z0-9]+/)?.[0];
+    expect(callId).toBeTruthy();
+    const argsJson = r1.text.match(/"arguments":\s*"(\{.*?\})"/)?.[1];
+    expect(argsJson).toBeTruthy();
+
+    // Turn 2 — assistant echo + tool 결과 회신 → 최종 답변
+    const r2 = await callTool("xbrush_chat", {
+      model: "bytedance/seed-2.0-mini",
+      messages: [
+        { role: "user", content: "What is the weather in Seoul right now?" },
+        {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            {
+              id: callId,
+              type: "function",
+              function: { name: "get_weather", arguments: JSON.parse(`"${argsJson}"`) },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: callId,
+          content: '{"temp_c": 31, "condition": "sunny", "humidity": 78}',
+        },
+      ],
+      tools,
+      max_tokens: 300,
+    });
+    if (r2.isError) console.warn("chat turn2:", r2.text.slice(0, 300));
+    expect(r2.isError).toBe(false);
+    expect(r2.text).toContain("Finish reason**: stop");
+    expect(r2.text.toLowerCase()).toContain("31");
   });
 });
 

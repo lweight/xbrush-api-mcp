@@ -83,7 +83,7 @@ server-side and its result can be recovered via `xbrush_list_requests` + `xbrush
 
 | Tool | Description |
 |------|-------------|
-| `xbrush_chat` | LLM chat completions (GLM 5.2, Seed 2.0 Mini) — synchronous, OpenAI-compatible, billed per token; vision models take image inputs via content parts (https or data: URL, `detail: low` for cheap image tokens) |
+| `xbrush_chat` | LLM chat completions (GLM 5.2, Seed 2.0 Mini) — synchronous, OpenAI-compatible, billed per token; vision models take image inputs via content parts (https or data: URL, `detail: low` for cheap image tokens); function calling via OpenAI-style `tools`/`tool_choice` (answer every `tool_call` with a `role:"tool"` message; forced tool_choice is honored by Seed 2.0 Mini but not GLM 5.2 — see `constraints.forcedChoiceHonored` in `xbrush_list_models`) |
 
 ### Utility (8)
 
@@ -91,7 +91,7 @@ server-side and its result can be recovered via `xbrush_list_requests` + `xbrush
 |------|-------------|
 | `xbrush_content_moderate` | NSFW moderation + masking for an image or video |
 | `xbrush_watermark_add` | Add the XBrush watermark to an image/video |
-| `xbrush_list_models` | List available AI models with pricing, vendor, and per-model constraints (video durations, LLM vision support) |
+| `xbrush_list_models` | List available AI models with pricing, vendor, and per-model constraints (video durations, LLM vision / function-calling support) |
 | `xbrush_list_voices` | List TTS voices (use a `voice_id` with `tts_generate`) |
 | `xbrush_get_request` | Check status/result of an async operation |
 | `xbrush_list_requests` | List recent API requests |

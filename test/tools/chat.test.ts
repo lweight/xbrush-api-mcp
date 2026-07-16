@@ -160,6 +160,170 @@ describe("xbrush_chat", () => {
     expect(result.content[0].text).toContain("(no content returned)");
   });
 
+  describe("function calling (2026-07-16)", () => {
+    const TOOLS = [
+      {
+        type: "function",
+        function: {
+          name: "get_weather",
+          description: "Get current weather for a city",
+          parameters: {
+            type: "object",
+            properties: { city: { type: "string" } },
+            required: ["city"],
+          },
+        },
+      },
+    ];
+    const toolCallCompletion: XBrushChatCompletionResponse = {
+      ...mockCompletion,
+      model: "bytedance/seed-2.0-mini",
+      choices: [
+        {
+          index: 0,
+          finish_reason: "tool_calls",
+          message: {
+            role: "assistant",
+            content: "",
+            tool_calls: [
+              {
+                id: "call_yfo7t9fm9zhg3sirnfo1ixqs",
+                type: "function",
+                function: { name: "get_weather", arguments: '{"city": "Seoul"}' },
+              },
+            ],
+          },
+        },
+      ],
+    };
+
+    it("tools/tool_choice가 body에 그대로 전달", async () => {
+      mockedApi.mockResolvedValueOnce(mockCompletion);
+      await handlers.get("xbrush_chat")!({
+        model: "bytedance/seed-2.0-mini",
+        messages: [{ role: "user", content: "weather in Seoul?" }],
+        tools: TOOLS,
+        tool_choice: { type: "function", function: { name: "get_weather" } },
+      });
+      const args = mockedApi.mock.calls.at(-1)![0] as any;
+      expect(args.data.tools).toEqual(TOOLS);
+      expect(args.data.tool_choice).toEqual({
+        type: "function",
+        function: { name: "get_weather" },
+      });
+    });
+
+    it("tools 미지정 시 body에서 생략", async () => {
+      mockedApi.mockResolvedValueOnce(mockCompletion);
+      await handlers.get("xbrush_chat")!({
+        model: "z-ai/glm-5.2",
+        messages: [{ role: "user", content: "hi" }],
+      });
+      const args = mockedApi.mock.calls.at(-1)![0] as any;
+      expect(args.data).not.toHaveProperty("tools");
+      expect(args.data).not.toHaveProperty("tool_choice");
+    });
+
+    it("tool_calls 응답 → JSON echo + 후속 지침 렌더링", async () => {
+      mockedApi.mockResolvedValueOnce(toolCallCompletion);
+      const result = await handlers.get("xbrush_chat")!({
+        model: "bytedance/seed-2.0-mini",
+        messages: [{ role: "user", content: "weather in Seoul?" }],
+        tools: TOOLS,
+      });
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].text as string;
+      expect(text).toContain("Tool calls requested");
+      expect(text).toContain("call_yfo7t9fm9zhg3sirnfo1ixqs");
+      expect(text).toContain("get_weather");
+      // arguments는 JSON 문자열 그대로 (stringify되어 이스케이프된 형태로 노출)
+      expect(text).toContain('{\\"city\\": \\"Seoul\\"}');
+      expect(text).toContain("tool_call_id");
+      expect(text).toContain("EVERY call");
+      expect(text).toContain("Finish reason**: tool_calls");
+      // 빈 content가 placeholder로 새지 않아야 함
+      expect(text).not.toContain("(no content returned)");
+    });
+
+    it("tool 결과 회신 메시지(tool role + assistant echo)가 그대로 전달", async () => {
+      mockedApi.mockResolvedValueOnce(mockCompletion);
+      const messages = [
+        { role: "user", content: "weather in Seoul?" },
+        {
+          role: "assistant",
+          content: "",
+          tool_calls: [
+            {
+              id: "call_yfo7t9fm9zhg3sirnfo1ixqs",
+              type: "function",
+              function: { name: "get_weather", arguments: '{"city": "Seoul"}' },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_yfo7t9fm9zhg3sirnfo1ixqs",
+          content: '{"temp_c": 31, "condition": "sunny"}',
+        },
+      ];
+      await handlers.get("xbrush_chat")!({
+        model: "bytedance/seed-2.0-mini",
+        messages,
+        tools: TOOLS,
+      });
+      const args = mockedApi.mock.calls.at(-1)![0] as any;
+      expect(args.data.messages).toEqual(messages);
+    });
+
+    it("PARAM_NOT_HONORED warnings 렌더링 (glm 강제 tool_choice 무시)", async () => {
+      mockedApi.mockResolvedValueOnce({
+        ...toolCallCompletion,
+        model: "z-ai/glm-5.2",
+        warnings: [
+          {
+            code: "PARAM_NOT_HONORED",
+            param: "tool_choice",
+            message:
+              "z-ai/glm-5.2 does not honor a forced function choice; the model selects the tool itself.",
+          },
+        ],
+      });
+      const result = await handlers.get("xbrush_chat")!({
+        model: "z-ai/glm-5.2",
+        messages: [{ role: "user", content: "weather?" }],
+        tools: TOOLS,
+        tool_choice: { type: "function", function: { name: "get_time" } },
+      });
+      const text = result.content[0].text as string;
+      expect(text).toContain("PARAM_NOT_HONORED");
+      expect(text).toContain("tool_choice");
+      expect(text).toContain("does not honor");
+    });
+
+    it("finish_reason tool_calls인데 tool_calls 비어있음 → 안내 문구 (required 비정상 케이스)", async () => {
+      mockedApi.mockResolvedValueOnce({
+        ...mockCompletion,
+        choices: [
+          {
+            index: 0,
+            finish_reason: "tool_calls",
+            message: { role: "assistant", content: "", tool_calls: null },
+          },
+        ],
+      });
+      const result = await handlers.get("xbrush_chat")!({
+        model: "bytedance/seed-2.0-mini",
+        messages: [{ role: "user", content: "hello" }],
+        tools: TOOLS,
+        tool_choice: "required",
+      });
+      expect(result.isError).toBeFalsy();
+      const text = result.content[0].text as string;
+      expect(text).toContain("no tool_calls were returned");
+      expect(text).toContain("tool_choice 'auto'");
+    });
+  });
+
   it("게이트웨이 504 → 복구 힌트 (get_request 안내)", async () => {
     mockedApi.mockRejectedValueOnce(
       new XBrushApiError(

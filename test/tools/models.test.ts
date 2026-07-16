@@ -152,4 +152,59 @@ describe("xbrush_list_models", () => {
     expect(text).toContain("vision (max 10 images, ~1298 tokens/image)");
     expect(text).toContain("text-only");
   });
+
+  it("text 모델 function calling constraints 포맷 (2026-07-16)", async () => {
+    const resp: XBrushModelsResponse = {
+      models: [
+        makeModel({
+          id: "bytedance/seed-2.0-mini",
+          category: "text",
+          featureType: "chat",
+          calType: "perToken",
+          creditInfo: { creditConfig: { inputPer1M: 0.13, outputPer1M: 0.52 } },
+          constraints: {
+            vision: true,
+            maxImages: 10,
+            baseTokens: 100,
+            tokensPerImage: 1298,
+            functionCalling: true,
+            toolsFixedTokens: 350,
+            forcedChoiceHonored: true,
+          },
+        }),
+        makeModel({
+          id: "z-ai/glm-5.2",
+          category: "text",
+          featureType: "chat",
+          calType: "perToken",
+          creditInfo: { creditConfig: { inputPer1M: 1.82, outputPer1M: 5.72 } },
+          constraints: {
+            vision: false,
+            baseTokens: 100,
+            functionCalling: true,
+            toolsFixedTokens: 150,
+            forcedChoiceHonored: false,
+          },
+        }),
+        makeModel({
+          id: "legacy/no-fc",
+          category: "text",
+          featureType: "chat",
+          calType: "perToken",
+          creditInfo: { creditConfig: { inputPer1M: 1 } },
+          constraints: { vision: false, functionCalling: false },
+        }),
+      ],
+    };
+    mockedApi.mockResolvedValueOnce(resp);
+    const result = await handlers.get("xbrush_list_models")!({});
+    const text = result.content[0].text;
+    expect(text).toContain(
+      "function calling (~350 fixed tokens/request, forced choice honored)"
+    );
+    expect(text).toContain(
+      "function calling (~150 fixed tokens/request, forced choice NOT honored)"
+    );
+    expect(text).toContain("no function calling");
+  });
 });
