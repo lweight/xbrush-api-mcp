@@ -244,8 +244,9 @@ export const ChatCompletionSchema = z
     model: z
       .string()
       .describe(
-        "LLM model ID (e.g. z-ai/glm-5.2, bytedance/seed-2.0-mini). Use xbrush_list_models with " +
-          "category='text' to see options, per-token pricing, and vision support."
+        "LLM model ID (e.g. z-ai/glm-5.2, bytedance/seed-2.0-mini, google/gemini-3.1-flash-lite). " +
+          "Use xbrush_list_models with category='text' to see options, per-token pricing, vision and " +
+          "function-calling support, and per-model param quirks."
       ),
     messages: z
       .array(ChatMessageSchema)

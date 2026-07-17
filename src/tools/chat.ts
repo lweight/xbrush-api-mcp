@@ -1,7 +1,8 @@
 /**
  * Chat tool: xbrush_chat
  *
- * SYNCHRONOUS — the one exception to the async-only rule. /v1/chat/completions
+ * SYNCHRONOUS — an exception to the async-only rule (as is voice_clone).
+ * /v1/chat/completions
  * has no async variant (POST /v1/chat/completions/async → 404) and answers
  * OpenAI-style in a single response. The platform edge gateway cuts the
  * connection at ~30s with an HTML 504; the request keeps processing (and
@@ -95,7 +96,7 @@ export function registerChatTools(server: McpServer): void {
     {
       title: "Chat (LLM)",
       description: [
-        "Chat with an XBrush-hosted LLM (OpenAI-compatible chat completions, e.g. GLM 5.2, Seed 2.0 Mini).",
+        "Chat with an XBrush-hosted LLM (OpenAI-compatible chat completions, e.g. GLM 5.2, Seed 2.0 Mini, Gemini 3.1 Flash Lite).",
         "SYNCHRONOUS — returns the completion text directly; no request_id polling needed.",
         "The platform gateway cuts responses at ~30s, so keep outputs short: prefer the default",
         "reasoning_effort (none) or 'minimal' and a modest max_tokens. On a 504 gateway timeout the",
@@ -110,15 +111,15 @@ export function registerChatTools(server: McpServer): void {
         "Non-vision models reject image parts (400, not billed).",
         "",
         "FUNCTION CALLING: pass OpenAI-style `tools` on models with constraints.functionCalling",
-        "(glm-5.2, seed-2.0-mini). When the model wants a call, the result shows finish_reason",
+        "(glm-5.2, seed-2.0-mini, gemini-3.1-flash-lite). When the model wants a call, the result shows finish_reason",
         "'tool_calls' plus the tool_calls array — function.arguments is a JSON-encoded STRING, parse it.",
         "Then call again appending the assistant message (tool_calls echoed verbatim; its content may",
         "be empty) and one {role:'tool', tool_call_id, content} message per call. EVERY tool_call must",
         "be answered before the next user message, or the API 400s. Models may emit several calls in",
         "one turn — handle the whole array (parallel_tool_calls is not supported / not exposed).",
         "tool_choice: 'auto' (default) / 'none' / 'required' / {type:'function', function:{name}}.",
-        "Forced choice is honored only when constraints.forcedChoiceHonored (seed-2.0-mini yes;",
-        "glm-5.2 picks its own tool and returns a PARAM_NOT_HONORED warning). 'required' may return",
+        "Forced choice is honored only when constraints.forcedChoiceHonored (seed-2.0-mini and",
+        "gemini-3.1-flash-lite yes; glm-5.2 picks its own tool and returns a PARAM_NOT_HONORED warning). 'required' may return",
         "an empty tool_calls response when no tool fits. Limits: ≤32 functions, ≤32KB serialized,",
         "names ^[a-zA-Z0-9_-]{1,64}$. Tools bill as input tokens EVERY request + fixed overhead",
         "(constraints.toolsFixedTokens: seed ~350, glm ~150) — omit tools when not needed.",
@@ -139,6 +140,9 @@ export function registerChatTools(server: McpServer): void {
         "",
         "Billed per token (input/output/cached rates via xbrush_list_models). OpenAI params not",
         "listed above (n, seed, response_format, stream, parallel_tool_calls) are not supported.",
+        "Some models ignore or adjust specific params instead of erroring — e.g. gemini-3.1-flash-lite",
+        "drops frequency/presence penalties and clamps reasoning_effort 'max' to 'high' — and the",
+        "result then carries a PARAM_DROPPED / PARAM_ADJUSTED warning (see constraints in xbrush_list_models).",
       ].join("\n"),
       inputSchema: ChatCompletionSchema,
       annotations: {

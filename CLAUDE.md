@@ -10,7 +10,7 @@
 
 ```
 src/
-├── index.ts              ← 서버 엔트리, 11개 도구 모듈 등록
+├── index.ts              ← 서버 엔트리, 12개 도구 모듈 등록
 ├── constants.ts          ← API 베이스 URL, 타임아웃 상수, 응답 크기 한도
 ├── types.ts              ← 공통 타입 정의
 ├── tool-filter.ts        ← XBRUSH_DISABLED_TOOLS 환경변수 처리
@@ -18,13 +18,14 @@ src/
 │   ├── audio.ts          ← tts / music / sound-effect
 │   ├── chat.ts           ← chat completions (LLM)
 │   ├── file-upload.ts
-│   ├── image.ts
+│   ├── image.ts          ← generate/edit/upscale/remove-bg + loras 적용
 │   ├── lip-sync.ts       ← 영상/사진(talking photo) lip-sync
+│   ├── lora.ts           ← lora_train (LoRA 학습)
 │   ├── models.ts
 │   ├── moderation.ts     ← content_moderate (image/video)
 │   ├── requests.ts
 │   ├── video.ts          ← generate / upscale / extend / retake
-│   ├── voice.ts          ← list_voices
+│   ├── voice.ts          ← list_voices / voice_clone
 │   └── watermark.ts
 ├── services/
 │   ├── dispatch.ts       ← submitAsync 헬퍼 (async 단일 경로)
@@ -32,15 +33,16 @@ src/
 │   └── xbrush-client.ts  ← HTTP 클라이언트 + 에러 매핑 + 기본 포맷터
 └── tools/                ← MCP 도구 핸들러
     ├── audio.ts          ← tts_generate, music_generate, sound_effect_generate
-    ├── chat.ts           ← xbrush_chat (동기 LLM — async-only 규칙의 유일한 예외)
+    ├── chat.ts           ← xbrush_chat (동기 LLM — voice_clone과 함께 async-only 예외)
     ├── file-upload.ts    ← xbrush_file_upload
     ├── image.ts          ← generate, edit, upscale, remove_bg
     ├── lip-sync.ts       ← xbrush_video_lip_sync
+    ├── lora.ts           ← xbrush_lora_train
     ├── models.ts         ← xbrush_list_models
     ├── moderation.ts     ← xbrush_content_moderate
     ├── requests.ts       ← get_request, list_requests, check_health
     ├── video.ts          ← video_generate, video_upscale, video_extend, video_retake
-    ├── voice.ts          ← xbrush_list_voices
+    ├── voice.ts          ← xbrush_list_voices, xbrush_voice_clone (동기)
     └── watermark.ts      ← xbrush_watermark_add
 ```
 
@@ -78,18 +80,30 @@ npm test             # Vitest 전체 실행
 - 사유: `/sync` 엔드포인트가 처리시간 초과 시 `{ syncCompleted: false, status: "pending", output: undefined }`를 HTTP 202로 반환하는 dual-shape contract여서 client 처리가 복잡해지고, MCP stdio 도구는 장시간 블록되면 client timeout 위험이 큼.
 - 모든 도구 호출 → `request_id` 반환 → `xbrush_get_request(request_id)`로 폴링.
 - 스키마에 `sync` 필드 없음. 전달 시 strict 모드로 거부됨.
-- **유일한 예외: `xbrush_chat`** — `/v1/chat/completions`는 서버에 async 변형이 없어(`/async` 404) 동기 호출. 아래 "LLM chat" 참고.
+- **예외 2개: `xbrush_chat`, `xbrush_voice_clone`** — 서버에 async 변형이 없는 동기 엔드포인트(chat은 `/async` 404 재확인 2026-07-17; voice/clone은 제출 시점에 오디오 다운로드+프로바이더 호출). 아래 "LLM chat" / "Voice clone" 참고.
 
 ## LLM chat — `xbrush_chat` (동기 예외, 중요)
-- **엔드포인트**: `POST /v1/chat/completions` (OpenAI 호환). **동기 전용** — async 변형 없음(2026-07-15 재확인 404). 2026-07 `text` 카테고리(`z-ai/glm-5.2`, featureType `chat`, calType `perToken`)와 함께 추가됨. `/v1/embeddings`/`/v1/completions`/`/v1/responses`는 없음(404).
+- **엔드포인트**: `POST /v1/chat/completions` (OpenAI 호환). **동기 전용** — async 변형 없음(2026-07-15 재확인 404). 2026-07 `text` 카테고리(featureType `chat`, calType `perToken`)와 함께 추가됨. 모델: `z-ai/glm-5.2`, `bytedance/seed-2.0-mini`, `google/gemini-3.1-flash-lite`(2026-07-17 신규). `/v1/embeddings`/`/v1/completions`/`/v1/responses`는 없음(404).
 - **요청 필드** (2026-07-15 역추적 + 동일자 vision 업데이트 재조사): `model`(필수), `messages`(필수, 1~1000개, `{role: system|user|assistant|tool, content, tool_calls?, tool_call_id?}`), `content`는 **string(비어있으면 400 "content must not be empty" — 단 tool_calls 있는 assistant는 ""/null 허용) 또는 파트 배열**(아래 vision), `max_tokens`/`max_completion_tokens`(1~65536; 서버가 `max_tokens`→`max_completion_tokens`로 정규화), `temperature`(0~2), `top_p`(0~1), `frequency_penalty`/`presence_penalty`(−2~2), `stop`(비어있지 않은 string 또는 1~4개 배열, 위반 시 400), `reasoning_effort`(enum `none/minimal/high/max`, 서버 기본 `none`), `stream`(bool — MCP는 미노출), **`tools`/`tool_choice`(2026-07-16 신규 — 아래 function calling)**. **서버는 strict가 아님**: `n`/`seed`/`response_format`/`logprobs`/`logit_bias`/`stream_options` 등 미인식 필드는 그냥 무시됨. **예외: `parallel_tool_calls`는 인식하되 `false`면 400** "not supported yet"(2026-07-16 실측 — MCP 미노출).
 - **Function calling (2026-07-16, 중요)**: 서버팀 공지 + prod 실측 재확인. `tools`(OpenAI 형식 `{type:"function", function:{name, description?, parameters?}}`) + `tool_choice`(`auto`/`none`/`required`/`{type:"function",function:{name}}` — **문자열은 free-form으로 노출**, 서버 위임) 인식. 응답은 `finish_reason:"tool_calls"` + `message.tool_calls[{id, type, function:{name, arguments}}]`, **`arguments`는 JSON 문자열**(객체 아님). 후속: assistant 메시지를 tool_calls 포함 그대로 echo(+ content ""/null OK, 실측) 후 call마다 `{role:"tool", tool_call_id, content}` 1개씩 — **하나라도 빠지면 400** "every tool_call must be answered before a user message — missing tool results for ..."(실측). tool content는 string 외 **text 파트 배열도 수용**(실측). 주의사항: (a) **glm-5.2는 강제 tool_choice 무시** — 요청은 정상 처리되고 top-level `warnings:[{code:"PARAM_NOT_HONORED", param:"tool_choice", message}]` 동반(실측; seed-2.0-mini는 정확히 준수), (b) **`required`는 도구가 안 어울리는 프롬프트면 `finish:"tool_calls"` + `tool_calls:null` 비정상 응답 가능**(실측 — 포맷터가 안내 문구 출력), (c) `parallel_tool_calls:false` 400 / stream+tools 미지원, (d) 상한 함수 32개·직렬화 32KB·이름 `^[a-zA-Z0-9_-]{1,64}$`(위반 시 400 fields[]에 명확한 메시지 — 이름 regex와 32개는 클라 스키마에도 미러링, 32KB는 직렬화 모호성 때문에 서버 위임), (e) `tools:[]`는 no-op으로 수용(실측), (f) **과금**: tools 있으면 스키마가 매 요청 input 토큰 + 모델별 고정 오버헤드(`constraints.toolsFixedTokens`: glm 150, seed 350; 공지 실측치는 seed ~301/glm ~96) — 불필요한 요청엔 tools 빼는 게 이득. record 기록에 input `tools` echo + output.choices에 `tool_calls` 보존 → **504 복구 경로 FC에도 유효**(실측). 모델 지원 여부는 `GET /v1/models/text`(전체 `/v1/models`에도 포함)의 `constraints.functionCalling`/`toolsFixedTokens`/`forcedChoiceHonored` — `xbrush_list_models` 포맷터가 `function calling (~350 fixed tokens/request, forced choice honored)` 식으로 표시.
 - **Vision (2026-07 중순, 중요)**: content 파트 배열 지원 — 인식 타입은 **`text`와 `image_url` 뿐**(그 외 "unknown content part type" 400). 형태: `{type:"text", text:"…"}`(비어있으면 400) / `{type:"image_url", image_url:{url, detail?}}`. 빈 배열은 400. **모든 role에서 배열 허용**(system/assistant도 text 파트 OK). `url`은 **https URL과 `data:` URL 둘 다 허용**(chat은 미디어 엔드포인트와 달리 host 허용목록 없음 — 실측). 이미지는 **vision 모델 한정**(`bytedance/seed-2.0-mini`, constraints `{vision:true, maxImages:10, tokensPerImage:1298, baseTokens:100}`): 비전 아닌 모델(glm-5.2, `vision:false`)에 이미지 주면 업스트림이 제출 시점 400 거부(무과금, `provider.upstreamMessage`에 "Model do not support image input"). 서버측 검증: 요청당 이미지 ≤ maxImages("at most 10 images per request"), 업스트림 최소 변 14px. **`detail`은 업스트림 패스스루**(`low`/`high`/`auto` — 잘못된 값은 업스트림 400이 허용값 나열): 토큰 실측 seed-2.0-mini 기준 `low` ≈ prompt 98, `high`/`auto`/미지정 ≈ 1,390~1,396 → **이미지당 ~14배 비용 차이**. MCP는 detail을 free-form string으로 노출(벤더 검증 위임 — `aspect_ratio` 철학과 동일).
+- **모델별 파라미터 특이사항 — warnings 체계 (2026-07-17 실측)**: 서버는 모델이 지원 안 하는 파라미터를 에러 대신 **무시/조정하고 top-level `warnings[]`로 알림**. 코드 3종 실측: `PARAM_NOT_HONORED`(glm-5.2 강제 tool_choice 무시), `PARAM_DROPPED`(gemini의 frequency/presence_penalty — constraints `penaltiesHonored:false`), `PARAM_ADJUSTED`(gemini의 reasoning_effort `max`→`high` 클램프 — constraints `reasoningMaxClampsToHigh:true`). gemini-3.1-flash-lite: vision(maxImages 10, ~1200 tokens/image)·FC(toolsFixedTokens 50, **forcedChoiceHonored true** 실측) 지원. MCP 포맷터는 warnings를 제네릭하게 렌더(코드 무관).
 - **플랫폼 주입 system 프롬프트**: 서버가 모든 chat 요청 앞에 자체 system 메시지(~280자, adult platform 고지)를 삽입 — request 기록의 `input.messages[0]`에 보이고(원본은 `originalBody`에 보존) prompt_tokens에 포함됨. 모델 constraints의 `baseTokens: 100`이 이 오버헤드(최소 프롬프트 실측 ~88-101 토큰).
 - **응답**: OpenAI 형식 `{id, object:"chat.completion", choices:[{message:{content, tool_calls?,...}, finish_reason}], usage:{prompt_tokens, completion_tokens, total_tokens, credits_charged, completion_tokens_details.reasoning_tokens, prompt_tokens_details.cached_tokens}, warnings?}`. **응답 `id`가 곧 request_id** — `/v1/requests`에 `domain:"text", action:"chat"`으로 기록되고 input echo + 전체 output이 남아 `xbrush_get_request`로 사후 회수 가능.
 - **게이트웨이 30초 한계 (중요)**: 엣지 게이트웨이(CloudFront)가 ~30초에 연결을 끊고 **HTML 504**를 반환(실측). 서버는 계속 처리·과금하며 결과는 request 기록으로 회수(`completed`면 output 존재, `failed`면 **자동 전액 환불** — `credits.refunded` 실측 확인). 클라이언트 처리: `TIMEOUT_CHAT` 35초(504를 수신하도록 30초보다 약간 김) + `handleApiError`가 JSON 아닌 504를 `GATEWAY_TIMEOUT`으로 매핑해 `list_requests`/`get_request` 복구 힌트 제공. 따라서 **reasoning_effort는 none/minimal 권장** — high/max는 30초를 쉽게 초과(minimal도 간헐 초과 실측).
-- **과금**: perToken (GLM 5.2: input 1.82 / output 5.72 / cached input 0.338 credits per 1M; seed-2.0-mini: 0.13 / 0.52 / 0.13 — GLM 대비 ~14배 저렴). 사소한 호출은 ~0.0001 credit.
+- **과금**: perToken (GLM 5.2: input 1.82 / output 5.72 / cached 0.338 credits per 1M; seed-2.0-mini: 0.13 / 0.52 / 0.13 — 최저가; gemini-3.1-flash-lite: 0.325 / 1.95 / 0.325). 사소한 호출은 ~0.0001 credit.
 - `GET /v1/models/text` 같은 **카테고리별 models 엔드포인트 존재** — `/v1/models`(전체)에도 text 모델 포함이라 `xbrush_list_models`는 기존 전체 조회 + 클라 필터 유지. text 모델 `constraints`(`vision`/`maxImages`/`tokensPerImage`/`baseTokens`)는 `xbrush_list_models` 포맷터가 `vision (max 10 images, ~1298 tokens/image)` / `text-only`로 표시.
+
+## LoRA 학습/적용 (2026-07-17, /v1/lora/train 활성화)
+- **`xbrush_lora_train`** → `POST /v1/lora/train` (async, domain `lora` / action `train`, estimatedTimeout ~2400s). 인식 필드(무과금 역추적): `name`(필수), `imageUrls`(필수 1~80 HTTPS), `model`, `triggerWord`(서버 기본 `"TOK"`), `steps`(500~8000, 서버 기본 1000). **과금 per1kStep 2 credits**(steps 500 → 1 credit 실측), 실패 시 전액 환불 확인.
+- **`model`은 제출 시점 미검증** — `__nope__`도 202 수용 후 처리 중 failed(환불). worker 지원 목록(에러 메시지 실측): `FLUX.1-dev, z-image-turbo, sdxl, animagine-xl-4.0, qwen-image, x-image-alpha` — **registry의 lora_train 모델(flux.1-dev, netayume-v4, qwen-image, z-image-turbo)과 불일치**(netayume-v4 없음). 소문자 registry ID(`flux.1-dev`)는 정상 수용 실측(대문자 표기는 표시용). 백엔드는 FAL(이미지들을 zip으로 묶어 전달).
+- **적용**: `/v1/image/generate`·`/v1/image/edit`가 `loras` 배열 인식 — 원소 `{url, weight}` (weight 0~2, 둘 다 필수; 검증 에러로 역추적). 엔드포인트 전역 인식(모델 무관)이나 실효는 LoRA-capable 베이스에서. MCP `xbrush_image_generate`/`_edit`에 `loras` 노출(그대로 전달). 프롬프트에 trigger word 포함 필요.
+
+## Voice clone (2026-07-17, /v1/voice/clone 활성화 — 동기!)
+- **`xbrush_voice_clone`** → `POST /v1/voice/clone` — **동기 엔드포인트** (async-only 규칙의 2번째 예외). 서버가 제출 시점에 오디오 다운로드+프로바이더 호출: 잘못된 URL이면 즉시 502(202 아님). `TIMEOUT_VOICE_CLONE` 35초(게이트웨이 ~30s + 여유).
+- 인식 필드: `name`(필수 — 기록엔 `display_name`으로 저장되고 내부 name은 서버 생성), `audioUrls`(필수 ≥1), `model`(**enum `eleven`/`speech-2.8-hd`/`speech-2.6-hd`** — 명확한 400으로 목록 반환하므로 MCP는 free-form + 설명), `description`, `removeBackgroundNoise`(기본 false).
+- **과금 flat 50 credits/시도, 실패 시 전액 환불 실측**. 기록: domain `voice` / action `clone` → 504 복구는 list_requests로.
+- **프로바이더 제약 실측(2026-07-17)**: eleven은 플랫폼 공유 슬롯 **30/30 만석**으로 현재 실패("maximum amount of custom voices"); minimax는 짧은 샘플 거부("voice duration too short" — ≥10초, 권장 30초+). **성공 경로 응답 형태는 미확정**(성공 1회 = 50 credits 실소모 + 공유 슬롯 점유라 프로브 보류) — 포맷터는 voice_id 계열 키 탐지 + 원본 JSON echo로 방어적 구현. 성공 실측 시 포맷터 정밀화 여지.
 
 ## Lip-sync — fabric-1.0 talking photo (2026-07)
 - `/v1/video/lip-sync` 검증은 **모델 무관 필드 superset** (model-aware 아님, 실측): `videoUrl`, `imageUrl`, `audioUrl`, `text`, `voiceId`, `duration`(1~60), `resolution`(enum `480p/720p`). 모델별 필수 조합은 후단에서 `INVALID_INPUT`으로 검사(예: "imageUrl is required for fabric-1.0 model").
@@ -143,7 +157,7 @@ npm test             # Vitest 전체 실행
 
 ## 테스트
 - **Vitest 4-tier**: `test/{schemas,services,tools,integration}/`
-- 현재 v2.10.0 기준 **385 케이스** 통과
+- 현재 v2.11.0 기준 **411 케이스** 통과
 - `npm test` / `npm run test:watch`
 - 통합 테스트는 axios mock 사용, 실 API 호출 없음
 - MCP Inspector 또는 Claude Code에서 수동 E2E
@@ -160,11 +174,11 @@ npm publish --access public
 ## 규칙
 - 커밋 메시지: 한국어
 - Transport: stdio 전용
-- 도구 21개 (Image 4, Video 5, Audio 3, Text 1, Utility 8)
-  - Image: generate, edit, upscale, remove_bg
+- 도구 23개 (Image 5, Video 5, Audio 4, Text 1, Utility 8)
+  - Image: generate, edit, upscale, remove_bg, lora_train
   - Video: generate, upscale, lip_sync, extend, retake
-  - Audio: tts_generate, music_generate, sound_effect_generate
+  - Audio: tts_generate, music_generate, sound_effect_generate, voice_clone (동기)
   - Text: chat (동기 LLM)
   - Utility: content_moderate, watermark_add, list_models, list_voices, get_request, list_requests, file_upload, check_health
-- 미구현(차기): `voice_clone`(/v1/voice/clone), `lora_train`(/v1/lora/train) — 소비측 스펙 확정 후
+- ~~미구현(차기): voice_clone, lora_train~~ → **2026-07-17 엔드포인트 활성화 확인 후 v2.11.0에서 구현 완료**
 - utility 모델 `gpt-4.1-nano`(featureType `prompt_enhance`/`image_to_prompt`)는 **공개 엔드포인트 미발견** (2026-07-15: /v1/prompt/enhance, /v1/utility/*, /v1/image/describe 등 후보 전부 404) — 내부 기능(예: idea 번역/프롬프트 보강)으로 추정, 도구화 대상 아님

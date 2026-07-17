@@ -104,6 +104,7 @@ export function registerImageTools(server: McpServer): void {
         "  aspect_ratio (string, optional): Aspect ratio for resolution-based models. gpt-image-2/-edit: 1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1 (1K/2K); only 16:9/9:16/21:9/1.91:1 at 4K. Special value \"custom\": gpt-image-2/-edit output the exact width×height you pass (both required; each a multiple of 16, longest edge ≤3840, total pixels 655,360–8,294,400) — e.g. width:1024,height:1152,aspect_ratio:\"custom\" returns 1024×1152.",
         "  quality (string, optional): low/medium/high — gpt-image-2/-edit only.",
         "  seed (int, optional): Random seed for reproducibility.",
+        "  loras (array, optional): Trained LoRAs to apply — [{url, weight 0-2}] from xbrush_lora_train output; include the trigger word in the prompt (LoRA-capable bases: flux.1-dev, qwen-image, z-image-turbo, netayume-v4).",
         "",
         "Note: resolution-based models (gpt-image-2, seedream-*, nano-banana-pro/2) ignore width/height — passing them returns an error. Exception: aspect_ratio:\"custom\" with width+height yields an EXACT pixel size on gpt-image-2/-edit (other resolution models may only keep the ratio or ignore it).",
       ].join("\n"),
@@ -131,6 +132,7 @@ export function registerImageTools(server: McpServer): void {
       if (args.aspect_ratio !== undefined) body.aspectRatio = args.aspect_ratio;
       if (args.quality !== undefined) body.quality = args.quality;
       if (args.seed !== undefined) body.seed = args.seed;
+      if (args.loras !== undefined) body.loras = args.loras;
 
       return submitAsync({
         url: "/v1/image/generate",
@@ -165,6 +167,7 @@ export function registerImageTools(server: McpServer): void {
         "  aspect_ratio (string, optional): Aspect ratio for resolution-based edit models. gpt-image-2-edit: 1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1 (1K/2K); only 16:9/9:16/21:9/1.91:1 at 4K. Special value \"custom\": gpt-image-2-edit outputs the exact width×height you pass (both required; each a multiple of 16, longest edge ≤3840, total pixels 655,360–8,294,400).",
         "  quality (string, optional): low/medium/high — gpt-image-2-edit only.",
         "  seed (int, optional): Random seed.",
+        "  loras (array, optional): Trained LoRAs to apply — [{url, weight 0-2}] from xbrush_lora_train output; include the trigger word in the prompt.",
         "",
         "Note: resolution-based edit models (gpt-image-2-edit, seedream-*-edit, nano-banana-pro/2-edit) ignore width/height — passing them returns an error. Exception: aspect_ratio:\"custom\" with width+height yields an EXACT pixel size on gpt-image-2-edit.",
         "Note: to give multiple reference images (e.g. compose two subjects with gpt-image-2-edit), put the primary in image_url and the rest in image_urls.",
@@ -196,6 +199,7 @@ export function registerImageTools(server: McpServer): void {
       if (args.aspect_ratio !== undefined) body.aspectRatio = args.aspect_ratio;
       if (args.quality !== undefined) body.quality = args.quality;
       if (args.seed !== undefined) body.seed = args.seed;
+      if (args.loras !== undefined) body.loras = args.loras;
 
       return submitAsync({
         url: "/v1/image/edit",

@@ -90,6 +90,23 @@ describe("xbrush_image_generate", () => {
     expect(callArgs.data.quality).toBe("high");
   });
 
+  it("loras → body.loras 그대로 전달 / 미지정 시 생략 (2026-07-17)", async () => {
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    const loras = [{ url: "https://cdn.xbrush.ai/lora/a.safetensors", weight: 0.8 }];
+    await handlers.get("xbrush_image_generate")!({
+      model: "flux.1-dev",
+      prompt: "a cat in TOK style",
+      loras,
+    });
+    let callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect(callArgs.data.loras).toEqual(loras);
+
+    mockedApi.mockResolvedValueOnce(mockAsync);
+    await handlers.get("xbrush_image_generate")!({ model: "z-image-turbo", prompt: "a cat" });
+    callArgs = mockedApi.mock.calls.at(-1)![0] as any;
+    expect("loras" in callArgs.data).toBe(false);
+  });
+
   it("resolution 기반 모델(gpt-image-2) + width → 거부(isError), API 미제출", async () => {
     const before = mockedApi.mock.calls.length;
     const result = await handlers.get("xbrush_image_generate")!({

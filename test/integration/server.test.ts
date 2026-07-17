@@ -30,6 +30,7 @@ import { registerLipSyncTools } from "../../src/tools/lip-sync.js";
 import { registerWatermarkTools } from "../../src/tools/watermark.js";
 import { registerModerationTools } from "../../src/tools/moderation.js";
 import { registerVoiceTools } from "../../src/tools/voice.js";
+import { registerLoraTools } from "../../src/tools/lora.js";
 import type { XBrushAsyncResponse, XBrushChatCompletionResponse } from "../../src/types.js";
 
 const mockedApi = vi.mocked(makeApiRequest);
@@ -62,6 +63,7 @@ beforeAll(async () => {
   registerRequestTools(mcpServer);
   registerModelTools(mcpServer);
   registerVoiceTools(mcpServer);
+  registerLoraTools(mcpServer);
   registerFileUploadTools(mcpServer);
 
   client = new Client({ name: "test-client", version: "1.0" });
@@ -82,8 +84,8 @@ afterAll(async () => {
 // ── 도구 등록 검증 ───────────────────────────────────────────────────
 
 describe("도구 등록", () => {
-  it("도구 21개 등록", () => {
-    expect(tools).toHaveLength(21);
+  it("도구 23개 등록", () => {
+    expect(tools).toHaveLength(23);
   });
 
   it("도구 이름 목록 일치", () => {
@@ -101,6 +103,7 @@ describe("도구 등록", () => {
       "xbrush_list_models",
       "xbrush_list_requests",
       "xbrush_list_voices",
+      "xbrush_lora_train",
       "xbrush_music_generate",
       "xbrush_sound_effect_generate",
       "xbrush_tts_generate",
@@ -109,6 +112,7 @@ describe("도구 등록", () => {
       "xbrush_video_lip_sync",
       "xbrush_video_retake",
       "xbrush_video_upscale",
+      "xbrush_voice_clone",
       "xbrush_watermark_add",
     ]);
   });
@@ -132,6 +136,8 @@ describe("도구 등록", () => {
       "xbrush_video_retake",
       "xbrush_content_moderate",
       "xbrush_watermark_add",
+      "xbrush_voice_clone",
+      "xbrush_lora_train",
     ];
     for (const name of generators) {
       const tool = tools.find((t) => t.name === name)!;

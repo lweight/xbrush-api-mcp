@@ -80,6 +80,38 @@ describe("ImageGenerateSchema", () => {
       ImageGenerateSchema.parse({ ...base, unknown_field: true })
     ).toThrow();
   });
+
+  describe("loras (2026-07-17 LoRA 적용)", () => {
+    it("[{url, weight}] 유효 (weight 경계 0/2)", () => {
+      const r = ImageGenerateSchema.parse({
+        ...base,
+        loras: [
+          { url: "https://cdn.xbrush.ai/lora/a.safetensors", weight: 0 },
+          { url: "https://cdn.xbrush.ai/lora/b.safetensors", weight: 2 },
+        ],
+      });
+      expect(r.loras).toHaveLength(2);
+    });
+
+    it("weight 범위 밖/누락, url 누락/비URL, 빈 배열, 미정의 필드 거부", () => {
+      const u = "https://cdn.xbrush.ai/lora/a.safetensors";
+      expect(() =>
+        ImageGenerateSchema.parse({ ...base, loras: [{ url: u, weight: 2.1 }] })
+      ).toThrow();
+      expect(() =>
+        ImageGenerateSchema.parse({ ...base, loras: [{ url: u, weight: -0.1 }] })
+      ).toThrow();
+      expect(() => ImageGenerateSchema.parse({ ...base, loras: [{ url: u }] })).toThrow();
+      expect(() => ImageGenerateSchema.parse({ ...base, loras: [{ weight: 1 }] })).toThrow();
+      expect(() =>
+        ImageGenerateSchema.parse({ ...base, loras: [{ url: "not-a-url", weight: 1 }] })
+      ).toThrow();
+      expect(() => ImageGenerateSchema.parse({ ...base, loras: [] })).toThrow();
+      expect(() =>
+        ImageGenerateSchema.parse({ ...base, loras: [{ url: u, weight: 1, scale: 1 }] })
+      ).toThrow();
+    });
+  });
 });
 
 describe("ImageEditSchema", () => {

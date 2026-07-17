@@ -98,6 +98,13 @@ export interface XBrushModel {
     toolsFixedTokens?: number;
     /** Whether a forced tool_choice {type:"function"} is obeyed (glm-5.2: false). */
     forcedChoiceHonored?: boolean;
+    // Text chat: per-model parameter quirks — 2026-07-17 (gemini-3.1-flash-lite).
+    /** false → frequency/presence penalties are ignored (response warns PARAM_DROPPED). */
+    penaltiesHonored?: boolean;
+    /** true → reasoning_effort "max" is adjusted to "high" (response warns PARAM_ADJUSTED). */
+    reasoningMaxClampsToHigh?: boolean;
+    /** Lip-sync: maximum clip duration in seconds (e.g. pixverse-lipsync 30). */
+    maxDuration?: number;
     [key: string]: unknown;
   };
 }

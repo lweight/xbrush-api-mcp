@@ -27,6 +27,7 @@ import { registerLipSyncTools } from "./tools/lip-sync.js";
 import { registerWatermarkTools } from "./tools/watermark.js";
 import { registerModerationTools } from "./tools/moderation.js";
 import { registerVoiceTools } from "./tools/voice.js";
+import { registerLoraTools } from "./tools/lora.js";
 import { applyDisableFilter, parseDisabledTools } from "./tool-filter.js";
 
 // ── Read version from package.json ────────────────────────────────────
@@ -65,7 +66,8 @@ registerWatermarkTools(server); // 1 tool:  watermark_add
 registerModerationTools(server); // 1 tool:  content_moderate
 registerRequestTools(server); // 3 tools: get_request, list_requests, check_health
 registerModelTools(server); // 1 tool:  list_models
-registerVoiceTools(server); // 1 tool:  list_voices
+registerVoiceTools(server); // 2 tools: list_voices, voice_clone (sync — like chat)
+registerLoraTools(server); // 1 tool:  lora_train
 registerFileUploadTools(server); // 1 tool:  file_upload
 
 reportUnmatched();

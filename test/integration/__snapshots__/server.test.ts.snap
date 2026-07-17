@@ -170,7 +170,7 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
       "type": "array",
     },
     "model": {
-      "description": "LLM model ID (e.g. z-ai/glm-5.2, bytedance/seed-2.0-mini). Use xbrush_list_models with category='text' to see options, per-token pricing, and vision support.",
+      "description": "LLM model ID (e.g. z-ai/glm-5.2, bytedance/seed-2.0-mini, google/gemini-3.1-flash-lite). Use xbrush_list_models with category='text' to see options, per-token pricing, vision and function-calling support, and per-model param quirks.",
       "type": "string",
     },
     "presence_penalty": {
@@ -385,6 +385,32 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "minItems": 1,
       "type": "array",
     },
+    "loras": {
+      "description": "Apply trained LoRA(s): [{url, weight}] with the weights URL from xbrush_lora_train output and weight 0-2. Use with a LoRA-capable base model and include the trigger word in the prompt.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "description": "Trained LoRA weights URL (from a completed xbrush_lora_train request).",
+            "format": "uri",
+            "type": "string",
+          },
+          "weight": {
+            "description": "LoRA strength 0-2 (1 = trained strength).",
+            "maximum": 2,
+            "minimum": 0,
+            "type": "number",
+          },
+        },
+        "required": [
+          "url",
+          "weight",
+        ],
+        "type": "object",
+      },
+      "minItems": 1,
+      "type": "array",
+    },
     "mask_url": {
       "description": "Mask image URL. White areas = edit, black areas = preserve.",
       "format": "uri",
@@ -462,6 +488,32 @@ exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
       "maximum": 4096,
       "minimum": 256,
       "type": "integer",
+    },
+    "loras": {
+      "description": "Apply trained LoRA(s): [{url, weight}] with the weights URL from xbrush_lora_train output and weight 0-2. Use with a LoRA-capable base model (e.g. flux.1-dev, qwen-image, z-image-turbo) and include the LoRA's trigger word in the prompt.",
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "description": "Trained LoRA weights URL (from a completed xbrush_lora_train request).",
+            "format": "uri",
+            "type": "string",
+          },
+          "weight": {
+            "description": "LoRA strength 0-2 (1 = trained strength).",
+            "maximum": 2,
+            "minimum": 0,
+            "type": "number",
+          },
+        },
+        "required": [
+          "url",
+          "weight",
+        ],
+        "type": "object",
+      },
+      "minItems": 1,
+      "type": "array",
     },
     "model": {
       "description": "Image model to use (e.g. z-image-turbo, flux.2-pro, seedream-5.0-pro, nano-banana-pro). Use xbrush_list_models to see available models.",

@@ -1,5 +1,27 @@
 import { z } from "zod";
 
+/**
+ * Trained-LoRA application (2026-07-17): /v1/image/generate and /v1/image/edit
+ * accept `loras` — an array of {url, weight} objects (weight 0-2, both fields
+ * required, verified via validation errors). The field is recognized
+ * endpoint-wide regardless of model; whether a given model actually applies
+ * LoRA weights is model-dependent (LoRA-trainable bases: flux.1-dev,
+ * qwen-image, z-image-turbo, netayume-v4 — see featureType lora_train).
+ */
+export const LoraSpecSchema = z
+  .object({
+    url: z
+      .string()
+      .url()
+      .describe("Trained LoRA weights URL (from a completed xbrush_lora_train request)."),
+    weight: z
+      .number()
+      .min(0)
+      .max(2)
+      .describe("LoRA strength 0-2 (1 = trained strength)."),
+  })
+  .strict();
+
 export const ImageGenerateSchema = z
   .object({
     model: z.string().describe("Image model to use (e.g. z-image-turbo, flux.2-pro, seedream-5.0-pro, nano-banana-pro). Use xbrush_list_models to see available models."),
@@ -12,6 +34,15 @@ export const ImageGenerateSchema = z
     aspect_ratio: z.string().trim().min(1).optional().describe("Aspect ratio for resolution-based models (e.g. \"16:9\"). gpt-image-2/-edit support 1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1 at 1K/2K — at 4K only 16:9, 9:16, 21:9, 1.91:1. Special value \"custom\" makes gpt-image-2/-edit use width×height as the exact output size (both required, each a multiple of 16, longest edge ≤3840, total pixels 655,360–8,294,400; missing dimensions or out-of-range values return 400). seedream-* / nano-banana-* accept their own sets; an unsupported value is rejected with the list of allowed ratios."),
     quality: z.enum(["low", "medium", "high"]).optional().describe("Output quality tier. Applies to byResolutionAndQuality models (gpt-image-2/-edit); higher = better and more expensive. Server default is high if omitted."),
     seed: z.number().int().optional().describe("Random seed for reproducible results."),
+    loras: z
+      .array(LoraSpecSchema)
+      .min(1)
+      .optional()
+      .describe(
+        "Apply trained LoRA(s): [{url, weight}] with the weights URL from xbrush_lora_train output " +
+          "and weight 0-2. Use with a LoRA-capable base model (e.g. flux.1-dev, qwen-image, " +
+          "z-image-turbo) and include the LoRA's trigger word in the prompt."
+      ),
   })
   .strict();
 
@@ -42,6 +73,14 @@ export const ImageEditSchema = z
     aspect_ratio: z.string().trim().min(1).optional().describe("Aspect ratio for resolution-based edit models (e.g. \"16:9\"). gpt-image-2-edit supports 1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1 at 1K/2K — at 4K only 16:9, 9:16, 21:9, 1.91:1. Special value \"custom\" makes gpt-image-2-edit use width×height as the exact output size (both required, each a multiple of 16, longest edge ≤3840, total pixels 655,360–8,294,400). seedream-*-edit / nano-banana-*-edit accept their own sets; an unsupported value is rejected with the list of allowed ratios."),
     quality: z.enum(["low", "medium", "high"]).optional().describe("Output quality tier. Applies to byResolutionAndQuality models (gpt-image-2-edit); higher = better and more expensive. Server default is high if omitted."),
     seed: z.number().int().optional().describe("Random seed for reproducible results."),
+    loras: z
+      .array(LoraSpecSchema)
+      .min(1)
+      .optional()
+      .describe(
+        "Apply trained LoRA(s): [{url, weight}] with the weights URL from xbrush_lora_train output " +
+          "and weight 0-2. Use with a LoRA-capable base model and include the trigger word in the prompt."
+      ),
   })
   .strict();
 

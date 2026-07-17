@@ -1,6 +1,6 @@
 {
   "name": "@lweight/xbrush-api-mcp",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "description": "MCP server for the XBrush AI media generation API (image, video, TTS, music, sound effects, lip-sync & talking photos, video extend/retake, LLM chat, content moderation, watermark)",
   "license": "MIT",
   "author": "Lightweight Inc. <dev@lightweight.kr>",

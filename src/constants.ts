@@ -35,3 +35,14 @@ export const TIMEOUT_UPLOAD = 180_000;
  * hint (the request keeps processing server-side — see GATEWAY_TIMEOUT).
  */
 export const TIMEOUT_CHAT = 35_000;
+
+/**
+ * Timeout for the synchronous voice clone call (35s).
+ *
+ * /v1/voice/clone is synchronous: the server downloads the audio files and
+ * calls the provider before answering (a bad URL fails immediately with 502,
+ * no request envelope — verified live 2026-07-17). Same ~30s edge-gateway
+ * cutoff as chat applies; failures are recorded (domain "voice", action
+ * "clone") and auto-refunded, so a 504 is recoverable via list_requests.
+ */
+export const TIMEOUT_VOICE_CLONE = 35_000;

@@ -207,4 +207,42 @@ describe("xbrush_list_models", () => {
     );
     expect(text).toContain("no function calling");
   });
+
+  it("모델별 파라미터 특이사항 + lipsync maxDuration 포맷 (2026-07-17)", async () => {
+    const resp: XBrushModelsResponse = {
+      models: [
+        makeModel({
+          id: "google/gemini-3.1-flash-lite",
+          category: "text",
+          featureType: "chat",
+          calType: "perToken",
+          creditInfo: { creditConfig: { inputPer1M: 0.325, outputPer1M: 1.95 } },
+          constraints: {
+            vision: true,
+            maxImages: 10,
+            tokensPerImage: 1200,
+            functionCalling: true,
+            toolsFixedTokens: 50,
+            forcedChoiceHonored: true,
+            penaltiesHonored: false,
+            reasoningMaxClampsToHigh: true,
+          },
+        }),
+        makeModel({
+          id: "pixverse-lipsync",
+          category: "video",
+          featureType: "lipsync",
+          calType: "perSecond",
+          creditInfo: { creditValue: 0.033333 },
+          constraints: { maxDuration: 30 },
+        }),
+      ],
+    };
+    mockedApi.mockResolvedValueOnce(resp);
+    const result = await handlers.get("xbrush_list_models")!({});
+    const text = result.content[0].text;
+    expect(text).toContain("penalties ignored");
+    expect(text).toContain("reasoning max→high");
+    expect(text).toContain("max 30s");
+  });
 });

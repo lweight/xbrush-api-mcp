@@ -70,6 +70,9 @@ function formatConstraints(m: XBrushModel): string {
   } else if (c.functionCalling === false) {
     parts.push("no function calling");
   }
+  if (c.penaltiesHonored === false) parts.push("penalties ignored");
+  if (c.reasoningMaxClampsToHigh === true) parts.push("reasoning max→high");
+  if (c.maxDuration != null) parts.push(`max ${c.maxDuration}s`);
   return parts.length ? ` | ${parts.join(" | ")}` : "";
 }
 
