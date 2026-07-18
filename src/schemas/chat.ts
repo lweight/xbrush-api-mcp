@@ -40,7 +40,8 @@ import { z } from "zod";
  *
  * Not exposed on purpose:
  * - `stream`: MCP stdio tools return a single result; streaming has no wire.
- *   (stream + tools is also still unsupported server-side.)
+ *   (The server also 400s stream:true outright — "stream is not supported
+ *   yet" — with or without tools; re-verified 2026-07-18.)
  * - `parallel_tool_calls`: server 400s on `false` ("not supported yet") —
  *   models may emit several tool_calls per turn regardless; answer them all.
  * - `n` / `seed` / `response_format` / `logprobs` / `logit_bias` /
