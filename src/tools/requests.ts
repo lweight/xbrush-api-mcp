@@ -46,10 +46,17 @@ export function formatOutput(out: XBrushOutput): string[] {
   // Images (generate/edit/outpaint/inpaint/enhance/upscale/remove-bg/layer-split/media image)
   if (out.imageUrls?.length) {
     take("imageUrls", "imageDimensions", "seedOrder", "layers");
+    // media/image jobs report one top-level width/height/format/sizeBytes instead of imageDimensions[]
+    const flatDim = !out.imageDimensions?.length && !out.videoUrl && out.width && out.height ? { width: out.width, height: out.height } : undefined;
+    if (flatDim) take("width", "height", "format", "sizeBytes");
     out.imageUrls.forEach((url, i) => {
-      const dim = out.imageDimensions?.[i];
+      const dim = out.imageDimensions?.[i] ?? flatDim;
       const layer = out.layers?.[i];
-      const size = dim?.width && dim?.height ? ` (${dim.width}×${dim.height})` : "";
+      const extras: string[] = [];
+      if (dim?.width && dim?.height) extras.push(`${dim.width}×${dim.height}`);
+      if (flatDim && out.format) extras.push(String(out.format));
+      if (flatDim && out.sizeBytes) extras.push(`${(out.sizeBytes / 1024).toFixed(1)} KB`);
+      const size = extras.length ? ` (${extras.join(", ")})` : "";
       const name = layer?.name ? ` — layer "${layer.name}" z${layer.zIndex ?? i}` : "";
       lines.push(`- Image ${i + 1}${size}${name}: ${url}`);
       if (layer?.boundingBox?.absolute) lines.push(`  - bbox [x0,y0,x1,y1]: ${layer.boundingBox.absolute.join(", ")}`);
@@ -72,9 +79,6 @@ export function formatOutput(out: XBrushOutput): string[] {
     lines.push(`- Video${meta.length ? ` (${meta.join(", ")})` : ""}: ${videoUrl}`);
     if (out.thumbnailUrl) lines.push(`- Thumbnail: ${out.thumbnailUrl}`);
     if (out.nsfwDetected) lines.push(`- NSFW detected: yes ⚠️`);
-  } else if (out.imageUrls?.length && (out.width || out.format || out.sizeBytes)) {
-    // media/image job metadata accompanying imageUrls
-    take("width", "height", "format", "sizeBytes");
   }
 
   // Audio (tts/tts-wt/music/sound-effect)

@@ -180,7 +180,7 @@ npm test             # Vitest 전체 실행
 
 ## 테스트
 - **Vitest 4-tier**: `test/{schemas,services,tools,integration}/` (+ `test/schemas/survey-2026-09.test.ts`, `test/tools/survey-2026-09.test.ts`, `test/{schemas,tools}/media.test.ts`)
-- 현재 v2.12.0 기준 **524 케이스** 통과
+- 현재 v2.12.0 기준 **525 케이스** 통과 (유료 e2e 33/33, 2026-09-06)
 - `npm test` / `npm run test:watch`
 - 통합 테스트는 axios mock 사용, 실 API 호출 없음
 - e2e(`npm run test:e2e`, `XBRUSH_E2E_PAID=1`로 유료 파이프라인) — MCP Inspector 또는 Claude Code에서 수동 E2E

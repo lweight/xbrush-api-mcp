@@ -63,7 +63,8 @@ Full re-survey of `api.xbrush.run` (model catalog 128 entries; every endpoint's 
 
 ### Tests
 
-- 411 → 524 unit + integration tests (new schema/tool files for media and the 2026-09 survey; refreshed snapshots for image_generate, image_edit, tts_generate, music_generate, chat).
+- Paid e2e pipeline extended with 6 live cases (sync analysis trio, outpaint, ffmpeg→wav→STT, image process, tts-wt, video vision) — 33/33 pass against `api.xbrush.run` (2026-09-06).
+- 411 → 525 unit + integration tests (new schema/tool files for media and the 2026-09 survey; refreshed snapshots for image_generate, image_edit, tts_generate, music_generate, chat).
 
 ## 2.9.0 — 2026-07-15
 

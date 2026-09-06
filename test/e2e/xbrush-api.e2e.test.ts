@@ -433,19 +433,24 @@ describe.runIf(hasApiKey && paidOk)("유료 풀 파이프라인 (크레딧 소�
     expect(done.text).toContain("1280×1024");
   });
 
-  it("18 media_ffmpeg trim → wav + stt_transcribe (WAV 전용, ~0.006 credit)", async () => {
-    if (!state.videoUrl) return;
+  it("18 media_ffmpeg (tts mp3 → wav) + stt_transcribe (WAV 전용, ~0.006 credit)", async () => {
+    // Generated videos (kling) carry no audio track — the server rejects extract-audio on them
+    // ("입력에 오디오 트랙이 없어") — so transcode the TTS clip from step 06 instead.
+    if (!state.audioUrl) return;
     const ff = await callTool("xbrush_media_ffmpeg", {
-      inputs: [state.videoUrl],
-      operations: [{ op: "trim", start: 0, end: 3 }, { op: "extract-audio" }],
+      inputs: [state.audioUrl],
+      operations: [{ op: "trim", start: 0, end: 3 }],
       output: { format: "wav" },
     });
+    if (ff.isError) console.warn("media_ffmpeg:", ff.text.slice(0, 300));
     expect(ff.isError).toBe(false);
     const ffDone = await pollUntilDone(extractRequestId(ff.text)!);
     expect(ffDone.status).toBe("completed");
     const wavUrl = ffDone.url;
+    expect(wavUrl).toMatch(/\.wav/);
     if (!wavUrl) return;
-    const stt = await callTool("xbrush_stt_transcribe", { audio_url: wavUrl });
+    const stt = await callTool("xbrush_stt_transcribe", { audio_url: wavUrl, language: "en" });
+    if (stt.isError) console.warn("stt_transcribe:", stt.text.slice(0, 300));
     expect(stt.isError).toBe(false);
     const sttDone = await pollUntilDone(extractRequestId(stt.text)!);
     expect(sttDone.status).toBe("completed");

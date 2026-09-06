@@ -438,6 +438,15 @@ describe("xbrush_get_request — 신규 output 형태 렌더", () => {
     expect(text).not.toContain("Other output fields");
   });
 
+  it("media image: imageUrls + top-level width/height/format/sizeBytes (imageDimensions 없음)", () => {
+    const text = formatRequestDetail({
+      ...base,
+      output: { width: 256, format: "webp", height: 256, imageUrls: ["https://a/out.webp"], sizeBytes: 2526 },
+    });
+    expect(text).toContain("Image 1 (256×256, webp, 2.5 KB): https://a/out.webp");
+    expect(text).not.toContain("Other output fields");
+  });
+
   it("stt: text/language/duration", () => {
     const text = formatRequestDetail({ ...base, output: { text: "hello world", model: "whisper-1", duration: 28.68, language: "en" } });
     expect(text).toContain("Transcript (en, 28.68s, whisper-1)");
