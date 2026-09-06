@@ -72,7 +72,7 @@ describe("ChatCompletionSchema", () => {
 
   it("reasoning_effort enum 외 값 거부", () => {
     expect(() =>
-      ChatCompletionSchema.parse({ model: "m", messages: [MSG], reasoning_effort: "medium" })
+      ChatCompletionSchema.parse({ model: "m", messages: [MSG], reasoning_effort: "ultra" })
     ).toThrow();
   });
 
@@ -88,19 +88,12 @@ describe("ChatCompletionSchema", () => {
     ).toThrow();
   });
 
-  it("n/seed/response_format/parallel_tool_calls 등 미지원 OpenAI 필드 거부 (strict)", () => {
+  it("n/seed/parallel_tool_calls 등 미지원 OpenAI 필드 거부 (strict)", () => {
     expect(() =>
       ChatCompletionSchema.parse({ model: "m", messages: [MSG], n: 2 })
     ).toThrow();
     expect(() =>
       ChatCompletionSchema.parse({ model: "m", messages: [MSG], seed: 42 })
-    ).toThrow();
-    expect(() =>
-      ChatCompletionSchema.parse({
-        model: "m",
-        messages: [MSG],
-        response_format: { type: "json_object" },
-      })
     ).toThrow();
     // 서버가 false에 400을 반환하는 미지원 파라미터 — 노출하지 않음
     expect(() =>

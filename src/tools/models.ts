@@ -14,8 +14,8 @@ import type { XBrushModelsResponse, XBrushModel } from "../types.js";
 
 // ── Helpers ───────────────────────────────────────────────────────────
 
-function formatCreditValue(v: number | Record<string, number>): string {
-  if (typeof v === "number") return String(v);
+function formatCreditValue(v: number | boolean | Record<string, number>): string {
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
   // Nested config (e.g. { audio: 0.52, noAudio: 0.26 } or quality tiers).
   return Object.entries(v)
     .map(([k, n]) => `${k} ${n}`)
@@ -24,21 +24,24 @@ function formatCreditValue(v: number | Record<string, number>): string {
 
 function formatCredit(m: XBrushModel): string {
   const ci = m.creditInfo;
-  if (ci.creditValue != null) return `${ci.creditValue} credits/${m.calType}`;
+  const parts: string[] = [];
+  if (ci.creditValue != null) parts.push(`${ci.creditValue} credits/${m.calType}`);
   if (ci.creditConfig) {
-    return Object.entries(ci.creditConfig)
-      .map(([k, v]) => `${k}=${formatCreditValue(v)}`)
-      .join(", ");
+    parts.push(
+      Object.entries(ci.creditConfig)
+        .map(([k, v]) => `${k}=${formatCreditValue(v)}`)
+        .join(", ")
+    );
   }
-  return "—";
+  return parts.length ? parts.join(" | ") : "—";
 }
 
 /**
- * Video i2v models carry a `constraints` object describing their duration
- * range in seconds ({min,max,step,default}); text chat models carry vision
- * capability ({vision, maxImages, tokensPerImage}) and function-calling
- * support ({functionCalling, toolsFixedTokens, forcedChoiceHonored});
- * other categories omit it.
+ * `constraints` differ by family: video i2v/extend/retake carry a duration
+ * range ({min,max,step,default}); text chat models carry capability flags
+ * (vision, functionCalling, structuredOutputHonored, …) and per-parameter
+ * quirks (samplingHonored, penaltiesHonored, stopHonored, reasoning*);
+ * image/video models may carry defaultResolution; STT carries input limits.
  */
 function formatConstraints(m: XBrushModel): string {
   const c = m.constraints;
@@ -52,10 +55,12 @@ function formatConstraints(m: XBrushModel): string {
       `duration ${c.min ?? "?"}-${c.max ?? "?"}s${extras.length ? ` (${extras.join(", ")})` : ""}`
     );
   }
+  if (c.defaultResolution) parts.push(`default ${c.defaultResolution}`);
   if (c.vision === true) {
     const extras: string[] = [];
     if (c.maxImages != null) extras.push(`max ${c.maxImages} images`);
     if (c.tokensPerImage != null) extras.push(`~${c.tokensPerImage} tokens/image`);
+    if (c.imageDetailHonored === true) extras.push("detail honored");
     parts.push(`vision${extras.length ? ` (${extras.join(", ")})` : ""}`);
   } else if (c.vision === false) {
     parts.push("text-only");
@@ -66,13 +71,23 @@ function formatConstraints(m: XBrushModel): string {
     if (c.forcedChoiceHonored != null) {
       extras.push(c.forcedChoiceHonored ? "forced choice honored" : "forced choice NOT honored");
     }
+    if (c.toolsRequireReasoningNone === true) extras.push("tools force reasoning none");
     parts.push(`function calling${extras.length ? ` (${extras.join(", ")})` : ""}`);
   } else if (c.functionCalling === false) {
     parts.push("no function calling");
   }
+  if (c.structuredOutputHonored === true) parts.push("structured output (response_format)");
+  if (c.samplingHonored === false) parts.push("temperature/top_p ignored");
   if (c.penaltiesHonored === false) parts.push("penalties ignored");
+  if (c.stopHonored === false) parts.push("stop ignored");
+  if (c.reasoningUnsupported === true) parts.push("no reasoning");
   if (c.reasoningMaxClampsToHigh === true) parts.push("reasoning max→high");
+  if (c.reasoningMinimalMapsToLow === true) parts.push("reasoning minimal→low");
+  if (c.reasoningNoneMapsToMinimal === true) parts.push("reasoning none→minimal");
+  if (c.reasoningMidTiersPromoteToHigh === true) parts.push("reasoning low/medium→high");
   if (c.maxDuration != null) parts.push(`max ${c.maxDuration}s`);
+  if (c.inputFormats?.length) parts.push(`input ${c.inputFormats.join("/")}`);
+  if (c.maxAudioBytes != null) parts.push(`max ${(c.maxAudioBytes / 1024 / 1024).toFixed(0)} MB`);
   return parts.length ? ` | ${parts.join(" | ")}` : "";
 }
 
@@ -112,13 +127,15 @@ export function registerModelTools(server: McpServer): void {
     {
       title: "List Models",
       description: [
-        "List available XBrush AI models with pricing info.",
-        "Models span image (generate/edit/upscale/remove-bg/outpaint/moderate), video (i2v/upscale/lipsync/extend/retake/moderate), audio (tts/music/sound-effect), text (chat LLMs for xbrush_chat, priced per 1M tokens), and utility.",
-        "Video i2v entries include their duration constraints (min-max seconds, step, default);",
-        "text entries flag vision-capable models (image input for xbrush_chat) vs text-only, plus",
-        "function-calling support (tools for xbrush_chat: fixed token overhead per request and",
-        "whether a forced tool_choice is honored — glm-5.2 does not honor it).",
-        "Watermark has no dedicated model list — call it directly.",
+        "List available XBrush AI models with pricing info (128 entries as of 2026-09).",
+        "Categories → featureType: image (generate/edit/outpaint/upscale/remove_bg/moderate/lora_train/layer_split),",
+        "video (i2v/extend/retake/upscale/lipsync/moderate/video_edit), audio (tts/tts-wt/music/soundeffect/soundeffect-text/",
+        "voice_clone/stt/lipsync), text (chat LLMs for xbrush_chat, priced per 1M tokens), utility (ffmpeg/image-process/",
+        "image_vision/video_vision/segment_detect/product_lookup — the media & analysis tools).",
+        "Video entries include duration constraints (min-max seconds, step, default) and per-resolution prices;",
+        "text entries flag vision, function calling (fixed token overhead, forced tool_choice honored?), structured output,",
+        "and which sampling params are ignored/adjusted per model.",
+        "Watermark and inpaint have no dedicated model list — call the tools directly.",
         "",
         "Args:",
         "  category (string, optional): 'image', 'video', 'audio', 'text', or 'utility'.",

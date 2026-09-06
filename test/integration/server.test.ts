@@ -31,6 +31,7 @@ import { registerWatermarkTools } from "../../src/tools/watermark.js";
 import { registerModerationTools } from "../../src/tools/moderation.js";
 import { registerVoiceTools } from "../../src/tools/voice.js";
 import { registerLoraTools } from "../../src/tools/lora.js";
+import { registerMediaTools } from "../../src/tools/media.js";
 import type { XBrushAsyncResponse, XBrushChatCompletionResponse } from "../../src/types.js";
 
 const mockedApi = vi.mocked(makeApiRequest);
@@ -64,6 +65,7 @@ beforeAll(async () => {
   registerModelTools(mcpServer);
   registerVoiceTools(mcpServer);
   registerLoraTools(mcpServer);
+  registerMediaTools(mcpServer);
   registerFileUploadTools(mcpServer);
 
   client = new Client({ name: "test-client", version: "1.0" });
@@ -84,8 +86,8 @@ afterAll(async () => {
 // ── 도구 등록 검증 ───────────────────────────────────────────────────
 
 describe("도구 등록", () => {
-  it("도구 23개 등록", () => {
-    expect(tools).toHaveLength(23);
+  it("도구 37개 등록", () => {
+    expect(tools).toHaveLength(37);
   });
 
   it("도구 이름 목록 일치", () => {
@@ -97,21 +99,35 @@ describe("도구 등록", () => {
       "xbrush_file_upload",
       "xbrush_get_request",
       "xbrush_image_edit",
+      "xbrush_image_enhance",
       "xbrush_image_generate",
+      "xbrush_image_inpaint",
+      "xbrush_image_layer_split",
+      "xbrush_image_outpaint",
+      "xbrush_image_product_lookup",
       "xbrush_image_remove_bg",
+      "xbrush_image_segment_detect",
       "xbrush_image_upscale",
+      "xbrush_image_vision",
       "xbrush_list_models",
       "xbrush_list_requests",
       "xbrush_list_voices",
       "xbrush_lora_train",
+      "xbrush_media_ffmpeg",
+      "xbrush_media_graph",
+      "xbrush_media_image_process",
+      "xbrush_media_info",
       "xbrush_music_generate",
       "xbrush_sound_effect_generate",
+      "xbrush_stt_transcribe",
       "xbrush_tts_generate",
+      "xbrush_video_edit",
       "xbrush_video_extend",
       "xbrush_video_generate",
       "xbrush_video_lip_sync",
       "xbrush_video_retake",
       "xbrush_video_upscale",
+      "xbrush_video_vision",
       "xbrush_voice_clone",
       "xbrush_watermark_add",
     ]);
@@ -138,6 +154,16 @@ describe("도구 등록", () => {
       "xbrush_watermark_add",
       "xbrush_voice_clone",
       "xbrush_lora_train",
+      "xbrush_image_outpaint",
+      "xbrush_image_inpaint",
+      "xbrush_image_enhance",
+      "xbrush_image_layer_split",
+      "xbrush_video_edit",
+      "xbrush_video_vision",
+      "xbrush_stt_transcribe",
+      "xbrush_media_ffmpeg",
+      "xbrush_media_image_process",
+      "xbrush_media_graph",
     ];
     for (const name of generators) {
       const tool = tools.find((t) => t.name === name)!;
@@ -292,6 +318,22 @@ describe("도구 annotation 검증", () => {
   it("xbrush_image_generate — readOnlyHint: false", () => {
     const tool = tools.find((t) => t.name === "xbrush_image_generate")!;
     expect(tool.annotations!.readOnlyHint).toBe(false);
+  });
+
+  it("동기 분석 도구(segment/vision/product/media_info) — readOnlyHint: true, destructiveHint: false", () => {
+    for (const name of [
+      "xbrush_image_segment_detect",
+      "xbrush_image_vision",
+      "xbrush_image_product_lookup",
+      "xbrush_media_info",
+    ]) {
+      const tool = tools.find((t) => t.name === name)!;
+      expect(tool.annotations!.readOnlyHint).toBe(true);
+      expect(tool.annotations!.destructiveHint).toBe(false);
+    }
+    // 과금되는 분석 3종은 idempotentHint false, 무료 프로브(media_info)는 true
+    expect(tools.find((t) => t.name === "xbrush_image_vision")!.annotations!.idempotentHint).toBe(false);
+    expect(tools.find((t) => t.name === "xbrush_media_info")!.annotations!.idempotentHint).toBe(true);
   });
 
   it("xbrush_get_request — idempotentHint: true", () => {

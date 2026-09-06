@@ -41,8 +41,19 @@ export const TIMEOUT_CHAT = 35_000;
  *
  * /v1/voice/clone is synchronous: the server downloads the audio files and
  * calls the provider before answering (a bad URL fails immediately with 502,
- * no request envelope — verified live 2026-07-17). Same ~30s edge-gateway
- * cutoff as chat applies; failures are recorded (domain "voice", action
- * "clone") and auto-refunded, so a 504 is recoverable via list_requests.
+ * no request envelope — verified live 2026-07-17; a successful clone answers
+ * in ~6-10s with status "completed" — verified 2026-09-06). Same ~30s
+ * edge-gateway cutoff as chat applies; the attempt is recorded (domain
+ * "voice", action "clone") and failures auto-refund, so a 504 is recoverable
+ * via list_requests.
  */
 export const TIMEOUT_VOICE_CLONE = 35_000;
+
+/**
+ * Timeout for the small synchronous utility endpoints (35s): image OCR
+ * (/v1/image/vision), open-vocabulary detection (/v1/image/segment-detect),
+ * product lookup (/v1/image/product-lookup) and media probing
+ * (GET /v1/media/info). They answer inline in ~1-7s (measured 2026-09-06);
+ * the 35s ceiling exists only so a gateway 504 is still received and mapped.
+ */
+export const TIMEOUT_SYNC_UTILITY = 35_000;

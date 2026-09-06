@@ -16,7 +16,9 @@ export function registerFileUploadTools(server: McpServer): void {
         "Upload a local file to XBrush CDN and get a URL.",
         "Use the returned CDN URL as image_url or video_url in other XBrush tools.",
         "",
-        "Supported formats: PNG, JPG, GIF, WebP, MP4, WebM, MP3, WAV.",
+        "Supported formats (server allowlist): images PNG/JPG/GIF/WebP/SVG/AVIF/HEIC, video MP4/MOV/WebM/MKV/AVI/TS,",
+        "audio MP3/WAV/M4A/AAC/FLAC/OGG, text TXT/VTT/SRT, plus .safetensors (LoRA weights), .m3u8, .zip.",
+        "Uploads are content-hashed (re-uploading the same bytes returns the existing URL).",
         "",
         "Args:",
         "  file_path (string, required): Absolute path to the local file.",
@@ -46,7 +48,7 @@ export function registerFileUploadTools(server: McpServer): void {
           `- **CDN URL**: ${cdnUrl}`,
           `- **Strategy**: ${strategy}`,
           "",
-          "Use this URL as `image_url` or `video_url` in other XBrush tools.",
+          "Use this URL as `image_url` / `video_url` / `audio_url` (or in `inputs`) in other XBrush tools.",
         ];
 
         return buildToolResult(lines.join("\n"));

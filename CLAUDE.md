@@ -10,38 +10,40 @@
 
 ```
 src/
-├── index.ts              ← 서버 엔트리, 12개 도구 모듈 등록
+├── index.ts              ← 서버 엔트리, 13개 도구 모듈 등록 (37 tools)
 ├── constants.ts          ← API 베이스 URL, 타임아웃 상수, 응답 크기 한도
-├── types.ts              ← 공통 타입 정의
+├── types.ts              ← 공통 타입 정의 (output 형태·모델 constraints·동기 유틸 응답)
 ├── tool-filter.ts        ← XBRUSH_DISABLED_TOOLS 환경변수 처리
 ├── schemas/              ← Zod 입력 스키마
-│   ├── audio.ts          ← tts / music / sound-effect
-│   ├── chat.ts           ← chat completions (LLM)
+│   ├── audio.ts          ← tts(+timestamps) / music / sound-effect / stt
+│   ├── chat.ts           ← chat completions (LLM) — response_format 포함
 │   ├── file-upload.ts
-│   ├── image.ts          ← generate/edit/upscale/remove-bg + loras 적용
+│   ├── image.ts          ← generate/edit/upscale/remove-bg/outpaint/inpaint/enhance/layer-split + segment-detect/vision/product-lookup
 │   ├── lip-sync.ts       ← 영상/사진(talking photo) lip-sync
 │   ├── lora.ts           ← lora_train (LoRA 학습)
+│   ├── media.ts          ← media ffmpeg / image-process / graph / info
 │   ├── models.ts
-│   ├── moderation.ts     ← content_moderate (image/video)
-│   ├── requests.ts
-│   ├── video.ts          ← generate / upscale / extend / retake
-│   ├── voice.ts          ← list_voices / voice_clone
-│   └── watermark.ts
+│   ├── moderation.ts     ← content_moderate (image/video, threshold)
+│   ├── requests.ts       ← get/list(domain·action·status 필터)
+│   ├── video.ts          ← generate / upscale / extend / retake / edit / vision
+│   ├── voice.ts          ← list_voices(+voice_id 상세) / voice_clone
+│   └── watermark.ts      ← strength
 ├── services/
-│   ├── dispatch.ts       ← submitAsync 헬퍼 (async 단일 경로)
-│   ├── file-upload.ts    ← 파일 업로드 (presign / direct / auto)
+│   ├── dispatch.ts       ← submitAsync(async 단일 경로) + callSync(동기 유틸 전용)
+│   ├── file-upload.ts    ← 파일 업로드 (presign / direct / auto) + MIME 맵
 │   └── xbrush-client.ts  ← HTTP 클라이언트 + 에러 매핑 + 기본 포맷터
 └── tools/                ← MCP 도구 핸들러
-    ├── audio.ts          ← tts_generate, music_generate, sound_effect_generate
-    ├── chat.ts           ← xbrush_chat (동기 LLM — voice_clone과 함께 async-only 예외)
+    ├── audio.ts          ← tts_generate(with_timestamps→/v1/tts-wt), music_generate, sound_effect_generate, stt_transcribe
+    ├── chat.ts           ← xbrush_chat (동기 LLM)
     ├── file-upload.ts    ← xbrush_file_upload
-    ├── image.ts          ← generate, edit, upscale, remove_bg
+    ├── image.ts          ← generate, edit, upscale, remove_bg, outpaint, inpaint, enhance, layer_split (async) + segment_detect, vision, product_lookup (동기)
     ├── lip-sync.ts       ← xbrush_video_lip_sync
     ├── lora.ts           ← xbrush_lora_train
+    ├── media.ts          ← media_ffmpeg, media_image_process, media_graph (async) + media_info (동기, 무료)
     ├── models.ts         ← xbrush_list_models
     ├── moderation.ts     ← xbrush_content_moderate
-    ├── requests.ts       ← get_request, list_requests, check_health
-    ├── video.ts          ← video_generate, video_upscale, video_extend, video_retake
+    ├── requests.ts       ← get_request(범용 output 렌더), list_requests(필터), check_health
+    ├── video.ts          ← video_generate, video_upscale, video_extend, video_retake, video_edit, video_vision
     ├── voice.ts          ← xbrush_list_voices, xbrush_voice_clone (동기)
     └── watermark.ts      ← xbrush_watermark_add
 ```
@@ -70,97 +72,118 @@ npm test             # Vitest 전체 실행
   - `TIMEOUT_ASYNC_POST`: 30초 (async POST 제출)
   - `TIMEOUT_GET`: 10초 (GET 요청)
   - `TIMEOUT_UPLOAD`: 180초 (파일 업로드 본문 전송)
-  - `TIMEOUT_CHAT`: 35초 (동기 chat completions — 아래 "LLM chat" 참고)
-- **입력 검증**: Zod strict mode (미정의 필드 거부)
+  - `TIMEOUT_CHAT` / `TIMEOUT_VOICE_CLONE` / `TIMEOUT_SYNC_UTILITY`: 35초 (동기 엔드포인트 — 게이트웨이 30초 한계보다 약간 김)
+- **입력 검증**: Zod strict mode (미정의 필드 거부). **서버는 strict가 아님** — 미인식 필드는 그냥 무시(2026-09-06 재확인). 필드 인벤토리 역추적은 "모든 후보 필드에 `{}`(잘못된 타입)를 넣은 POST" 1회로 가능: 인식 필드는 전부 `error.fields[]`에 타입 에러로 나열되고 미인식 필드는 침묵(무과금).
 - **Tool annotations**: `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint` 명시
-- **생성 도구의 `idempotentHint`는 반드시 false** — 중복 과금 방지
+- **생성 도구의 `idempotentHint`는 반드시 false** — 중복 과금 방지. 과금되는 동기 분석 도구(vision/segment/product)도 false, 무료 프로브(media_info)만 true.
+- **webhookUrl**: 모든 async 엔드포인트가 `webhookUrl`(URL) 필드를 인식(2026-09-06). MCP는 미노출(stdio 컨텍스트에 수신자 없음).
+- **응답 봉투(2026-08~)**: async 제출은 `{requestId, status, domain, action, creditCharged, estimatedTimeout, pollUrl, urls:{get}}`. 일부 엔드포인트는 제출 중 완료되어 **202 + `status:"completed"`** 를 돌려줌(`/v1/tts-wt/generate`, `/v1/voice/clone`) — 결과는 request 기록에만 있음. 기록(`GET /v1/requests/{id}`)에는 `credits:{charged,refunded,balance_after}`, `originalBody`(제출 원본), `input`(워커 정규화 형태), `queueTimesMs/processingTimesMs` 추가. 상태값: pending/processing/completed/failed/timeout/aborted.
+- **`GET /v1/requests` 필터**: `domain`, `action`, `status`(대문자 enum PENDING/PROCESSING/COMPLETED/FAILED/TIMEOUT/ABORTED — 클라가 대문자 정규화). `DELETE /v1/requests/{id}`는 `{success:true}` 반환하나 기록은 계속 조회됨(사실상 no-op) — 미노출.
+- **도메인/액션 명** (list_requests 필터용): image/{generate,edit,outpaint,inpaint,enhance,layer-split,upscale,remove-bg,moderate,image_vision,segment_detect,product_lookup}, video/{generate,extend,retake,upscale,lip-sync,moderate,video_edit,video_vision}, tts/generate, tts-wt/generate, music/generate, sound-effect/generate, stt/transcribe, voice/clone, lora/train, text/chat, media/{ffmpeg,image,graph}.
 
 ## Async-only (중요)
-- **모든 생성 도구는 async 단일 경로**. `/sync` 엔드포인트는 호출하지 않는다 (빠른 모델/느린 모델 무관).
+- **모든 생성 도구는 async 단일 경로**. `/sync` 엔드포인트는 호출하지 않는다 (빠른 모델/느린 모델 무관). 2026-09 신규 엔드포인트도 대부분 `/sync` 변형이 존재하나(image/generate·edit·upscale·remove-background, video/*, tts, music, sound-effect, stt, tts-wt, watermark) 사용 금지.
 - 사유: `/sync` 엔드포인트가 처리시간 초과 시 `{ syncCompleted: false, status: "pending", output: undefined }`를 HTTP 202로 반환하는 dual-shape contract여서 client 처리가 복잡해지고, MCP stdio 도구는 장시간 블록되면 client timeout 위험이 큼.
 - 모든 도구 호출 → `request_id` 반환 → `xbrush_get_request(request_id)`로 폴링.
 - 스키마에 `sync` 필드 없음. 전달 시 strict 모드로 거부됨.
-- **예외 2개: `xbrush_chat`, `xbrush_voice_clone`** — 서버에 async 변형이 없는 동기 엔드포인트(chat은 `/async` 404 재확인 2026-07-17; voice/clone은 제출 시점에 오디오 다운로드+프로바이더 호출). 아래 "LLM chat" / "Voice clone" 참고.
+- **예외(서버에 async 변형이 없는 동기 엔드포인트)**: `xbrush_chat`, `xbrush_voice_clone`, 그리고 2026-09 추가된 **동기 분석 3종** `xbrush_image_vision`(OCR)·`xbrush_image_segment_detect`·`xbrush_image_product_lookup`(각 ~1-7초, `/async`·`/sync` 변형 모두 404) + 무료 `xbrush_media_info`(GET). `services/dispatch.ts`의 `callSync` 사용.
+
+## 2026-09-06 전수조사 요약 (v2.12.0)
+- 모델 카탈로그 **128개**(image 40 / video 42 / audio 21 / text 12 / utility 13). `/v1/models/{category}`는 image/video/audio/utility/text만 유효(그 외 400에 목록). 모델 엔트리에 `vendor`, `output`(출력 크기 계약 메타: status/modes/axes/backend), `constraints` 확장.
+- **신규 엔드포인트**: `/v1/image/outpaint`(과거 404 → 활성), `/v1/image/inpaint`, `/v1/image/enhance`, `/v1/image/layer-split`, `/v1/image/segment-detect`, `/v1/image/vision`, `/v1/image/product-lookup`, `/v1/video/edit`, `/v1/video/vision`, `/v1/stt/transcribe`, `/v1/tts-wt/generate`, `/v1/media/ffmpeg`, `/v1/media/image`, `/v1/media/graph`, `GET /v1/media/info`, `GET /v1/media/fonts`, `GET /v1/media/luts`, `GET /v1/voice/{id}`, `DELETE /v1/voice/{id}`(버그: 존재하는 voice도 VOICE_NOT_FOUND — 미노출), `POST /v1/stream/chat/completions`(SSE — 미노출).
+- **미발견**: `seed-audio-1.0`(audio/featureType `seed-audio`, perSecond 0.00325)의 공개 엔드포인트 — 후보 40여 경로 전부 404(내부용 추정). `gpt-4.1-nano`(prompt_enhance/image_to_prompt)도 여전히 공개 엔드포인트 없음.
+- **실측 과금 특이**: `/v1/image/outpaint`·`/v1/image/inpaint`·`/v1/image/enhance`는 제출·완료 모두 `creditCharged 0`(2026-09-06 시점 무과금). `media/*`는 초당/메가픽셀당 극소액(floor 0.002 / 0.0004).
+
+### Image 신규 (역추적 + 실호출 확인)
+- **outpaint** `POST /v1/image/outpaint`: `imageUrl`, `canvasWidth`/`canvasHeight`(64~4096 int, **필수**), `scale`(0.05~4), `prompt`, `resolution`(1K/2K/4K). 모델 필드 없음. 출력은 정확히 캔버스 크기(1792×1408 실측), ~40초.
+- **inpaint** `POST /v1/image/inpaint`: `imageUrl`, `mask`(**필수** string — https URL / `data:image/png;base64,…` / raw base64 PNG **3형태 모두 성공 실측**; 잘못된 문자열은 워커가 "Invalid base64" 실패), `resolution`(1K/2K/4K), `numInferenceSteps`(1~100), `seed`, `expand`(0~128). prompt 없음(content-aware fill). 출력은 원본 크기.
+- **enhance** `POST /v1/image/enhance`: `imageUrl`, `mode`(string, 제출 시 미검증), `n`(1~4), `seed`. **실측 2건 모두 `GENERATION_TIMEOUT` 600s**(무과금) — 도구 설명에 실험적 경고.
+- **layer-split** `POST /v1/image/layer-split`: `imageUrl`, `model`(enum `qwen-image-layered`/`seedream-5.0-pro-layerize` — 후자만 카탈로그에 있음, 1K 0.55 / 2K 1.1), `prompt`(≤1000), `size`(1K/2K). 출력 `{layers:[{name,zIndex,boundingBox:{absolute,normalized},description}], imageUrls[], imageDimensions[]}`(index 정렬). 단순 음식 사진은 BytePlus가 거부(환불), 포스터는 background/product/text 3층 성공.
+- **segment-detect** (동기 200): `imageUrl`, `prompt`(1~120 필수) → `{detected,count,imageWidth,imageHeight,boxes:[{x,y,width,height,score}]}`(픽셀). 0.01 credit. 기록 action `segment_detect`.
+- **vision** (동기 200, OCR): `imageUrl`(https 또는 `data:image/…`), `mode`(text/document — 실측 동일 결과) → `{items:[{text,bbox[x0,y0,x1,y1] 0~1 정규화,confidence}], fullText, locale, imageWidth/Height, analyzedFrames, creditsCharged 0.003}`. 기록 action `image_vision`.
+- **product-lookup** (동기 200, 0.05 flat): `imageUrl`, `language`(en/ko/ja/zh), `mode`(grounded/fast) → `{productPresent, brandPresent, brandStatus, brand{…}, product{productName,categoryLabel,keySpecs,confidence,…}, products[], visionEvidence{entities[]}, grounded, sources, searchQueries}`. 기록 action `product_lookup`. 내부 모델 gemini-3.1-flash-lite.
+- **generate/edit 신규 필드**: `idea`(비영어 프롬프트, 서버 번역), `cfg`(0~20), `guidanceScale`(0~50), `scheduler`(enum `simple`), `sampler`(string), `background`(auto/opaque/transparent), `triggerWord`. edit: `imageUrls` 상한 **9**(과거 15로 두었던 것 수정), `negativePrompt`, `maskUrl`; **`mode`는 미인식**(deprecated 유지·무시). upscale: `upscaleFactor` **number 1.5~4**, `targetHeight`(256~8192; 1408px→targetHeight 2048 → 2048×2048 실측).
+
+### Video 신규
+- **`/v1/video/generate` 검증은 더 이상 모델 인지가 아님** — 모든 모델 동일 superset(2026-09-06 20개 모델 동일 결과): `model, prompt, idea, imageUrl, imageUrls(string|{url,role}), duration(1~30), resolution(512p/768p/480p/720p/1080p/1440p/2160p/2k/4k), aspectRatio(auto/adaptive/16:9/9:16/1:1/4:3/3:4/21:9/custom), generateAudio, consistencyMode(overlay/advanced/auto), negativePrompt, seed, audioUrl, width, height, fps(24/25/48/50), steps, acceleration(none/regular/high), webhookUrl`. **`endImageUrl`·`promptRelevance` 미인식**(무시) — 끝프레임은 `image_urls` role `last_frame`. MCP는 두 필드를 deprecated로 유지(전달해도 무해).
+- 신규 i2v 모델: seedance-2.5(4~30s), kling-v3-omni, kling-o1/o3/o3-ref, minimax-h3/-ref(2k/768p), wan-3.0-video/-ref/-prime/-prime-ref(2~30s), gemini-omni-1.1-flash(3~10s), ltx-2.3(1~20s), veo3.1/-fast(4k 티어). `-ref` 모델 = reference-to-video(imageUrls). role 오류 메시지는 여전히 moderation 문구로 새는 버그(변화 없음).
+- **video/edit** `POST /v1/video/edit` (async, action `video_edit`): `model`(gemini-omni-1.1-flash, 0.143/s·최소 1초 과금), `videoUrl`(≤2048), `prompt|idea`(1~4000), `audio`(source/model/none). 5초 클립 0.858 credit, 133초. 출력 `{videoUrl, thumbnailUrl, width, height, fps, duration, retimed, audioSource, usageTokens, nsfwDetected, fileSize}`.
+- **video/vision** `POST /v1/video/vision` (async, action `video_vision`, 0.003/s): `videoUrl`, `language`(2글자). 출력 `{transcript:{text,language,duration,segments[{start,end,text}]}, fullText, frames[], analyzedFrames, frameWidth/Height, durationSec}`.
+- extend: `prompt/idea/negativePrompt/startTime/resolution(360p/540p/720p/1080p)/generateAudio/style(anime/3d_animation/clay/comic/cyberpunk)/seed` 추가(모델 무관 superset); retake: `prompt/idea/startTime(0~20)/endTime(0~40)`; upscale `model` enum realesrgan/seedvr(대소문자 변형 수용).
+
+### Audio 신규
+- **TTS 경로**: `/v1/tts/generate`(도메인 `tts`), `/v1/music/generate`(`music`), `/v1/sound-effect/generate`(`sound-effect`) — 과거 `/v1/audio/*` 추측 경로는 404(원래부터 이 경로). 필드: `text`(≤10000), `model`, `voiceId`, `speed`(0.5~2), `pitch`(−12~12), `style`(0~1), `emotion`(happy/sad/angry/fearful/disgusted/surprised/calm/fluent/whisper), `outputFormat`(string — eleven-v3는 무시하고 mp3, Seed는 wav 반환). **`language` 미인식**(deprecated 유지).
+- **voiceId 요구(서버 메시지)**: MiniMax speech-* → `moss_audio_*`(list_voices model=speech-2.8-hd); `seed-icl-2.0` → 클론된 `xbseed_*`; `seed-tts-2.0` → "preset voice name"(**목록 미공개** — `GET /v1/tts/voices`는 model 파라미터를 무시하고 항상 eleven-v3 21개 이름만 반환; 추측 3종 실패); eleven-v3는 voiceId 없이 동작(기본 Rachel, `GET /v1/tts/voices`의 name 사용 가능 — Aria 실측).
+- **tts-wt** `POST /v1/tts-wt/generate`(도메인 `tts-wt`): `text, model, voiceId, speed, style` → **202 + status completed 즉시**(1~7초). 기록 output `{audioUrl, duration, voiceId, alignment:{characters[], character_start_times_seconds[], character_end_times_seconds[]}, normalizedAlignment}`. MCP는 `xbrush_tts_generate.with_timestamps:true`로 라우팅.
+- **stt** `POST /v1/stt/transcribe`(도메인 `stt`, whisper-1 0.00013/s, async 202): `audioUrl`(**WAV만** — RIFF 헤더 제출 시 검사, mp3는 400), `language`(ISO-639-1 소문자). 출력 `{text, model, duration, language}`. WAV는 `media/ffmpeg extract-audio + output.format wav` 또는 로컬 변환 후 `xbrush_file_upload`.
+- music: `duration` **5~300**, `imageUrl`(이미지 조건부), `negativePrompt`, `seed`; 모델 enum은 업스트림 메시지로 노출(lyria2/lyria3/lyria3-pro). sound-effect 모델 enum: pixverse-sound-effects/pixverse/elevenlabs-sound-effects/stable-audio-sfx. lyria3 5초 요청 → 30.8초 트랙 0.052.
+
+### Voice clone (동기, 2026-09-06 성공 실측)
+- 202 + `status:"completed"` (MiniMax 10초, Seed 6초). **과금 flat 2 credits**(eleven/speech-2.8-hd/speech-2.6-hd) / **2.6**(seed-icl-2.0) — 과거 "50 credits" 기록은 폐기. 실패 시 환불.
+- 기록 output `{success, data:{voice_id, name, provider, demo_audio_url, requires_verification, stored_audio_urls?, audio_hashes?, vendor_status?, available_training_times?}}`; input에는 `display_name`(사용자 이름)과 서버 생성 `name`(`moss_audio_*`/`xbseed_*`). MCP 도구는 제출 직후 기록을 GET해 voice_id를 렌더.
+- 필드: `name`, `audioUrls`, `model`(enum eleven/speech-2.8-hd/speech-2.6-hd/**seed-icl-2.0**), `voiceId`(**xbseed_* 전용** — 기존 Seed voice 재학습, `available_training_times` 15), `description`, `removeBackgroundNoise`, `webhookUrl`. 28초 TTS mp3 샘플로 MiniMax·Seed 모두 성공.
+- `GET /v1/voice/list?model=` enum: eleven/speech-2.8-hd/speech-2.6-hd/seed-icl-2.0(TTS 모델 id는 400 → MCP가 매핑). seed는 `voices:[]` + note("vendor listing is not supported"). `GET /v1/voice/{voiceId}` → `{voiceId,name,model,provider,description,demoAudioUrl,status,retrainable,createdAt}`. `DELETE /v1/voice/{voiceId}`는 존재하는 voice에도 VOICE_NOT_FOUND(버그) — 테스트로 만든 voice 2개(`moss_audio_5e431c90…`, `xbseed_1d4a5c0b…`)는 삭제 불가로 잔존.
+
+### Media utilities (category utility, 도메인 `media`)
+- **ffmpeg** `POST /v1/media/ffmpeg`: `inputs`(1~10 URL), `operations`(1~20, op enum 15: trim/concat/transcode/scale/extract-audio/thumbnail/watermark/gif/speed/crop/rotate/fade/subtitle/merge-audio/still; op 파라미터는 단일 superset DTO — start,end,duration,codec(h264/h265/vp9),crf,bitrate,width,height,fit(crop/contain/pad),at,count,position(9방향),margin,scale,opacity,fps,loop,factor,x,y,aspect,degrees(90/180/270),type(in/out),src(URL),style(default/boxed/large)), `output{format(mp4/webm/mov/gif/mp3/m4a/wav/jpg/png),fps(1~120),quality}`. 제출 시 입력 메타를 읽음(못 읽으면 400 INVALID_INPUT, 무과금). 2초 trim: 0.002 credit, 2.3초. 출력 `{videoUrl, thumbnailUrl, width, height, durationSeconds, sizeBytes, format}`.
+- **image** `POST /v1/media/image`: `inputs`(1~6), `operations`(≤10, op enum 37), `output{format jpg/png/webp/gif, quality 1~100}`. 범위: width/height ≤12000, fit contain/cover/fill, gravity 9방향, degrees 90/180/270, direction horizontal/vertical/grid, columns ≤6, gap ≤128, scale/opacity 0.01~1, size 8~512, strokeWidth ≤16, brightness/contrast/saturation/hue ±100, sigma 0.1~10, amount 0.1~3, mode normalize/level/equalize, strength 1~30, method auto/deskew/perspective. 256px webp resize 0.0006 credit. 출력 `{imageUrls[], width, height, format, sizeBytes}`.
+- **graph** `POST /v1/media/graph`: `inputs:[{id,url}]`(id `^[a-z][a-z0-9_]{0,31}$`), `nodes:[{id, op, from:{port: id|id[]}, params:{…}}]`, `output:{from, format(mp4/webm/gif/mp3/m4a/wav), quality(low/medium/high), fps}`. **params는 반드시 `params` 객체 안**(노드 최상위 키는 무시됨 — trim start 최상위에 두면 자르지 않고 통과, 실측). 포트: 대부분 `in`(concat/xfade/blend/amix/aconcat은 배열), overlay `{base,over}`, alphamerge `{base,alpha}`, set_audio `{video,audio}`, 소스 op(color/silence) 없음. op 목록·op별 허용 params는 서버 에러 메시지("unknown param X — allowed: …", "unknown port X — ports: …")로 전부 역추적해 `src/schemas/media.ts`/도구 설명에 요약. drawtext `font`는 `GET /v1/media/fonts`(406 엔트리·206 고유, ko/ja/zh/en), lut3d `lut`는 `GET /v1/media/luts`(cinematic_v1, citypop_v1, digicam_v1, golden_v1, monofilm_v1, moody_v1, retrofilm_v1, …). 출력은 ffmpeg와 동일.
+- **info** `GET /v1/media/info?url=`: 무과금 동기. video `{width,height,fps,durationInSeconds,hasVideo,hasAudio,sizeBytes,videoCodec}` / image `{kind,format,width,height,frames,hasAlpha,hasIccProfile,exifOrientation,sizeBytes}`; 못 읽으면 **HTTP 200 + `{error, url}`**(s3 객체 기준 — assets.xbrush.ai CDN URL만 사실상 가능).
+
+### 파일 업로드
+- `POST /v1/files/upload`(multipart `file`) 응답 `{success, url, fileKey, fileSize, mimeType, hash, deduplicated}`(content-hash 중복 제거). presign `mimeType` 허용목록 확장(svg/avif/heic/heif, mov/webm/mp2t/avi/mkv, mp3/wav/mp4/aac/flac/ogg/webm, text/plain·vtt·srt, safetensors, m3u8, zip) → `services/file-upload.ts` MIME 맵 동기화.
 
 ## LLM chat — `xbrush_chat` (동기 예외, 중요)
-- **엔드포인트**: `POST /v1/chat/completions` (OpenAI 호환). **동기 전용** — async 변형 없음(2026-07-15 재확인 404). 2026-07 `text` 카테고리(featureType `chat`, calType `perToken`)와 함께 추가됨. 모델: `z-ai/glm-5.2`, `bytedance/seed-2.0-mini`, `google/gemini-3.1-flash-lite`(2026-07-17 신규). `/v1/embeddings`/`/v1/completions`/`/v1/responses`는 없음(404).
-- **요청 필드** (2026-07-15 역추적 + 동일자 vision 업데이트 재조사): `model`(필수), `messages`(필수, 1~1000개, `{role: system|user|assistant|tool, content, tool_calls?, tool_call_id?}`), `content`는 **string(비어있으면 400 "content must not be empty" — 단 tool_calls 있는 assistant는 ""/null 허용) 또는 파트 배열**(아래 vision), `max_tokens`/`max_completion_tokens`(1~65536; 서버가 `max_tokens`→`max_completion_tokens`로 정규화), `temperature`(0~2), `top_p`(0~1), `frequency_penalty`/`presence_penalty`(−2~2), `stop`(비어있지 않은 string 또는 1~4개 배열, 위반 시 400), `reasoning_effort`(enum `none/minimal/high/max`, 서버 기본 `none`), **`tools`/`tool_choice`(2026-07-16 신규 — 아래 function calling)**. **서버는 strict가 아님**: `n`/`seed`/`response_format`/`logprobs`/`logit_bias`/`stream_options` 등 미인식 필드는 그냥 무시됨(2026-07-18 재확인). **예외 — 인식하되 명시 거부 2종**(둘 다 MCP 미노출): `parallel_tool_calls`는 `false`면 400 "not supported yet"(2026-07-16 실측), `stream`은 `true`면 400 "stream is not supported yet"(**2026-07-18 실측 — 이전엔 인식 필드로 분류했으나 명시 거부로 변경됨**; `false`는 no-op 수용).
-- **Function calling (2026-07-16, 중요)**: 서버팀 공지 + prod 실측 재확인. `tools`(OpenAI 형식 `{type:"function", function:{name, description?, parameters?}}`) + `tool_choice`(`auto`/`none`/`required`/`{type:"function",function:{name}}` — **문자열은 free-form으로 노출**, 서버 위임) 인식. 응답은 `finish_reason:"tool_calls"` + `message.tool_calls[{id, type, function:{name, arguments}}]`, **`arguments`는 JSON 문자열**(객체 아님). 후속: assistant 메시지를 tool_calls 포함 그대로 echo(+ content ""/null OK, 실측) 후 call마다 `{role:"tool", tool_call_id, content}` 1개씩 — **하나라도 빠지면 400** "every tool_call must be answered before a user message — missing tool results for ..."(실측). tool content는 string 외 **text 파트 배열도 수용**(실측). 주의사항: (a) **glm-5.2는 강제 tool_choice 무시** — 요청은 정상 처리되고 top-level `warnings:[{code:"PARAM_NOT_HONORED", param:"tool_choice", message}]` 동반(실측; seed-2.0-mini는 정확히 준수), (b) **`required`는 도구가 안 어울리는 프롬프트면 `finish:"tool_calls"` + `tool_calls:null` 비정상 응답 가능**(실측 — 포맷터가 안내 문구 출력), (c) `parallel_tool_calls:false` 400 / stream+tools 미지원, (d) 상한 함수 32개·직렬화 32KB·이름 `^[a-zA-Z0-9_-]{1,64}$`(위반 시 400 fields[]에 명확한 메시지 — 이름 regex와 32개는 클라 스키마에도 미러링, 32KB는 직렬화 모호성 때문에 서버 위임), (e) `tools:[]`는 no-op으로 수용(실측), (f) **과금**: tools 있으면 스키마가 매 요청 input 토큰 + 모델별 고정 오버헤드(`constraints.toolsFixedTokens`: glm 150, seed 350; 공지 실측치는 seed ~301/glm ~96) — 불필요한 요청엔 tools 빼는 게 이득. record 기록에 input `tools` echo + output.choices에 `tool_calls` 보존 → **504 복구 경로 FC에도 유효**(실측). 모델 지원 여부는 `GET /v1/models/text`(전체 `/v1/models`에도 포함)의 `constraints.functionCalling`/`toolsFixedTokens`/`forcedChoiceHonored` — `xbrush_list_models` 포맷터가 `function calling (~350 fixed tokens/request, forced choice honored)` 식으로 표시.
-- **Vision (2026-07 중순, 중요)**: content 파트 배열 지원 — 인식 타입은 **`text`와 `image_url` 뿐**(그 외 "unknown content part type" 400). 형태: `{type:"text", text:"…"}`(비어있으면 400) / `{type:"image_url", image_url:{url, detail?}}`. 빈 배열은 400. **모든 role에서 배열 허용**(system/assistant도 text 파트 OK). `url`은 **https URL과 `data:` URL 둘 다 허용**(chat은 미디어 엔드포인트와 달리 host 허용목록 없음 — 실측). 이미지는 **vision 모델 한정**(`bytedance/seed-2.0-mini`, constraints `{vision:true, maxImages:10, tokensPerImage:1298, baseTokens:100}`): 비전 아닌 모델(glm-5.2, `vision:false`)에 이미지 주면 업스트림이 제출 시점 400 거부(무과금, `provider.upstreamMessage`에 "Model do not support image input"). 서버측 검증: 요청당 이미지 ≤ maxImages("at most 10 images per request"), 업스트림 최소 변 14px. **`detail`은 업스트림 패스스루**(`low`/`high`/`auto` — 잘못된 값은 업스트림 400이 허용값 나열): 토큰 실측 seed-2.0-mini 기준 `low` ≈ prompt 98, `high`/`auto`/미지정 ≈ 1,390~1,396 → **이미지당 ~14배 비용 차이**. MCP는 detail을 free-form string으로 노출(벤더 검증 위임 — `aspect_ratio` 철학과 동일).
-- **모델별 파라미터 특이사항 — warnings 체계 (2026-07-17 실측)**: 서버는 모델이 지원 안 하는 파라미터를 에러 대신 **무시/조정하고 top-level `warnings[]`로 알림**. 코드 3종 실측: `PARAM_NOT_HONORED`(glm-5.2 강제 tool_choice 무시), `PARAM_DROPPED`(gemini의 frequency/presence_penalty — constraints `penaltiesHonored:false`), `PARAM_ADJUSTED`(gemini의 reasoning_effort `max`→`high` 클램프 — constraints `reasoningMaxClampsToHigh:true`). gemini-3.1-flash-lite: vision(maxImages 10, ~1200 tokens/image)·FC(toolsFixedTokens 50, **forcedChoiceHonored true** 실측) 지원. MCP 포맷터는 warnings를 제네릭하게 렌더(코드 무관).
-- **플랫폼 주입 system 프롬프트**: 서버가 모든 chat 요청 앞에 자체 system 메시지(~280자, adult platform 고지)를 삽입 — request 기록의 `input.messages[0]`에 보이고(원본은 `originalBody`에 보존) prompt_tokens에 포함됨. 모델 constraints의 `baseTokens: 100`이 이 오버헤드(최소 프롬프트 실측 ~88-101 토큰).
-- **응답**: OpenAI 형식 `{id, object:"chat.completion", choices:[{message:{content, tool_calls?,...}, finish_reason}], usage:{prompt_tokens, completion_tokens, total_tokens, credits_charged, completion_tokens_details.reasoning_tokens, prompt_tokens_details.cached_tokens}, warnings?}`. **응답 `id`가 곧 request_id** — `/v1/requests`에 `domain:"text", action:"chat"`으로 기록되고 input echo + 전체 output이 남아 `xbrush_get_request`로 사후 회수 가능.
-- **게이트웨이 30초 한계 (중요)**: 엣지 게이트웨이(CloudFront)가 ~30초에 연결을 끊고 **HTML 504**를 반환(실측). 서버는 계속 처리·과금하며 결과는 request 기록으로 회수(`completed`면 output 존재, `failed`면 **자동 전액 환불** — `credits.refunded` 실측 확인). 클라이언트 처리: `TIMEOUT_CHAT` 35초(504를 수신하도록 30초보다 약간 김) + `handleApiError`가 JSON 아닌 504를 `GATEWAY_TIMEOUT`으로 매핑해 `list_requests`/`get_request` 복구 힌트 제공. 따라서 **reasoning_effort는 none/minimal 권장** — high/max는 30초를 쉽게 초과(minimal도 간헐 초과 실측).
-- **과금**: perToken (GLM 5.2: input 1.82 / output 5.72 / cached 0.338 credits per 1M; seed-2.0-mini: 0.13 / 0.52 / 0.13 — 최저가; gemini-3.1-flash-lite: 0.325 / 1.95 / 0.325). 사소한 호출은 ~0.0001 credit.
-- `GET /v1/models/text` 같은 **카테고리별 models 엔드포인트 존재** — `/v1/models`(전체)에도 text 모델 포함이라 `xbrush_list_models`는 기존 전체 조회 + 클라 필터 유지. text 모델 `constraints`(`vision`/`maxImages`/`tokensPerImage`/`baseTokens`)는 `xbrush_list_models` 포맷터가 `vision (max 10 images, ~1298 tokens/image)` / `text-only`로 표시.
+- **엔드포인트**: `POST /v1/chat/completions` (OpenAI 호환). **동기 전용** — async 변형 없음. 스트리밍은 별도 `POST /v1/stream/chat/completions`(SSE, 2026-09 신설 — 동기 경로에 `stream:true`를 주면 400으로 안내). MCP 미노출.
+- **모델 12종 (2026-09-06)**: `z-ai/glm-5.2`, `bytedance/seed-2.0-mini`, `bytedance/seed-2.1-turbo`, `google/gemini-3.1-flash-lite`, `google/gemini-3.5-flash-lite`, `anthropic/claude-sonnet-5`, `anthropic/claude-opus-5`, `deepseek/deepseek-v4-flash`, `openai/gpt-4o`, `openai/gpt-4o-mini`, `openai/gpt-5.4`, `xai/grok-4.3` — 전부 실호출 확인. vision은 glm-5.2·deepseek 제외 전부(`maxImages 10`, tokensPerImage 1200~50000). function calling 전 모델(toolsFixedTokens 50~500; forcedChoiceHonored는 glm만 false).
+- **요청 필드** (2026-09-06 재역추적): `model`, `messages`(1~1000, role system|user|assistant|tool — `developer` 거부), `content`(string 또는 `text`/`image_url` 파트 배열 — `input_audio`/`video_url`/`file`은 "unknown content part type"), `max_tokens`/`max_completion_tokens`(1~65536), `temperature`(0~2), `top_p`(0~1), `frequency_penalty`/`presence_penalty`(−2~2), `stop`, `reasoning_effort`(**enum `none/minimal/low/medium/high/max`** — low/medium 신규), `tools`, `tool_choice`, `parallel_tool_calls`(false → 400), `stream`(true → 400), **`response_format`(신규 — `{type:"json_object"}` | `{type:"json_schema", json_schema:{name, schema, strict}}`; type 외 값·json_schema 누락은 400, OpenAI는 name 필수(업스트림 400))**. 여전히 미인식: `n`, `seed`, `logprobs`, `top_logprobs`, `logit_bias`, `user`, `metadata`, `stream_options`.
+- **모델별 warnings 체계** (`constraints` 플래그 ↔ 응답 top-level `warnings[]`): `samplingHonored:false`(anthropic/*, gemini-3.5, gpt-5.4 — temperature/top_p PARAM_DROPPED), `penaltiesHonored:false`(gemini, anthropic, grok), `stopHonored:false`(grok-4.3 — stop 무시 실측), `structuredOutputHonored:true`(openai/*, gemini-3.5 — 그 외 모델은 response_format PARAM_DROPPED; seed-2.0-mini·glm-5.2 실측), `imageDetailHonored:true`(openai — detail low로 과금 차이), `reasoningUnsupported`(gpt-4o/-mini), `reasoningMaxClampsToHigh`(gemini, grok), `reasoningMinimalMapsToLow`(gpt-5.4), `reasoningNoneMapsToMinimal`(gemini-3.5 — none 요청 시 PARAM_ADJUSTED), `reasoningMidTiersPromoteToHigh`(glm-5.2 — medium 요청 시 147 reasoning 토큰 실측), `toolsRequireReasoningNone`(gpt-5.4 — tools+reasoning 시 none으로 조정 PARAM_ADJUSTED 실측), `forcedChoiceHonored:false`(glm — PARAM_NOT_HONORED). `xbrush_list_models` 포맷터가 전부 렌더.
+- **Vision / Function calling / 게이트웨이 30초 / 과금 / 플랫폼 system 프롬프트**: 2026-07 조사 내용 유지 — content 파트는 `text`/`image_url`만, `detail` 패스스루(seed-2.0-mini low ≈ 98 vs high ≈ 1,390 토큰), tool_calls `arguments`는 JSON 문자열, 미응답 tool_call 있으면 400, 함수 ≤32·이름 `^[a-zA-Z0-9_-]{1,64}$`·32KB, 엣지 게이트웨이 ~30초 HTML 504(`GATEWAY_TIMEOUT` 매핑, 기록으로 회수·실패 시 환불), 응답 `id`가 request_id(domain text/action chat), 서버가 system 메시지(~280자 adult platform 고지)를 앞에 삽입(baseTokens 100). 가격(1M당 input/output/cached): glm 1.82/5.72/0.338, seed-2.0-mini 0.13/0.52/0.13, seed-2.1-turbo 0.65/3.25/0.13, gemini-3.1 0.325/1.95/0.325, gemini-3.5 0.39/3.25/0.039, sonnet-5 3.9/19.5/0.39, opus-5 6.5/32.5/0.65, deepseek 0.182/0.364/0.0364, gpt-4o 3.25/13/1.625, gpt-4o-mini 0.195/0.78/0.0975, gpt-5.4 3.25/19.5/0.325, grok-4.3 1.625/3.25/0.26.
 
-## LoRA 학습/적용 (2026-07-17, /v1/lora/train 활성화)
-- **`xbrush_lora_train`** → `POST /v1/lora/train` (async, domain `lora` / action `train`, estimatedTimeout ~2400s). 인식 필드(무과금 역추적): `name`(필수), `imageUrls`(필수 1~80 HTTPS), `model`, `triggerWord`(서버 기본 `"TOK"`), `steps`(500~8000, 서버 기본 1000). **과금 per1kStep 2 credits**(steps 500 → 1 credit 실측), 실패 시 전액 환불 확인.
-- **`model`은 제출 시점 미검증** — `__nope__`도 202 수용 후 처리 중 failed(환불). worker 지원 목록(에러 메시지 실측): `FLUX.1-dev, z-image-turbo, sdxl, animagine-xl-4.0, qwen-image, x-image-alpha` — **registry의 lora_train 모델(flux.1-dev, netayume-v4, qwen-image, z-image-turbo)과 불일치**(netayume-v4 없음). 소문자 registry ID(`flux.1-dev`)는 정상 수용 실측(대문자 표기는 표시용). 백엔드는 FAL(이미지들을 zip으로 묶어 전달).
-- **적용**: `/v1/image/generate`·`/v1/image/edit`가 `loras` 배열 인식 — 원소 `{url, weight}` (weight 0~2, 둘 다 필수; 검증 에러로 역추적). 엔드포인트 전역 인식(모델 무관)이나 실효는 LoRA-capable 베이스에서. MCP `xbrush_image_generate`/`_edit`에 `loras` 노출(그대로 전달). 프롬프트에 trigger word 포함 필요.
+## LoRA 학습/적용
+- **`xbrush_lora_train`** → `POST /v1/lora/train` (async, domain `lora` / action `train`, estimatedTimeout ~2400s). 인식 필드: `name`(필수), `imageUrls`(필수 1~80 HTTPS), `model`, `triggerWord`(서버 기본 `"TOK"`), `steps`(500~8000, 기본 1000), `image`(URL — 용도 미확인), `webhookUrl`. **과금 per1kStep 2 credits**(steps 500 → 1 credit), 실패 시 전액 환불(2026-09-06 재확인).
+- **`model`은 제출 시점 미검증** — `__nope__`도 202 수용 후 failed(환불). worker 지원 목록(2026-09-06 에러 메시지): `FLUX.1-dev, z-image-turbo, sdxl, animagine-xl-4.0, netayume-v4, anima, qwen-image, x-image-alpha`. registry의 lora_train 모델: flux.1-dev, z-image-turbo, qwen-image, netayume-v4, anima-base(5개). 백엔드 FAL(이미지 zip).
+- **적용**: `/v1/image/generate`·`/v1/image/edit`가 `loras` 배열 인식 — 원소 `{url, weight}`(weight 0~2). `triggerWord` 필드도 인식(프롬프트에 직접 써도 됨).
 
-## Voice clone (2026-07-17, /v1/voice/clone 활성화 — 동기!)
-- **`xbrush_voice_clone`** → `POST /v1/voice/clone` — **동기 엔드포인트** (async-only 규칙의 2번째 예외). 서버가 제출 시점에 오디오 다운로드+프로바이더 호출: 잘못된 URL이면 즉시 502(202 아님). `TIMEOUT_VOICE_CLONE` 35초(게이트웨이 ~30s + 여유).
-- 인식 필드: `name`(필수 — 기록엔 `display_name`으로 저장되고 내부 name은 서버 생성), `audioUrls`(필수 ≥1), `model`(**enum `eleven`/`speech-2.8-hd`/`speech-2.6-hd`** — 명확한 400으로 목록 반환하므로 MCP는 free-form + 설명), `description`, `removeBackgroundNoise`(기본 false).
-- **과금 flat 50 credits/시도, 실패 시 전액 환불 실측**. 기록: domain `voice` / action `clone` → 504 복구는 list_requests로.
-- **프로바이더 제약 실측(2026-07-17)**: eleven은 플랫폼 공유 슬롯 **30/30 만석**으로 현재 실패("maximum amount of custom voices"); minimax는 짧은 샘플 거부("voice duration too short" — ≥10초, 권장 30초+). **성공 경로 응답 형태는 미확정**(성공 1회 = 50 credits 실소모 + 공유 슬롯 점유라 프로브 보류) — 포맷터는 voice_id 계열 키 탐지 + 원본 JSON echo로 방어적 구현. 성공 실측 시 포맷터 정밀화 여지.
+## Lip-sync — fabric-1.0 talking photo (2026-07, 변화 없음)
+- `/v1/video/lip-sync` 검증은 **모델 무관 필드 superset**: `videoUrl`, `imageUrl`, `audioUrl`, `text`, `voiceId`, `duration`(1~60), `resolution`(480p/720p), `webhookUrl`. 모델별 필수 조합은 후단 `INVALID_INPUT`(예: "videoUrl is required for pixverse-lipsync model").
+- **fabric-1.0 / fabric-1.0-fast** (VEED): 정지 사진(`imageUrl`) talking photo. 음성은 `audioUrl` 또는 내장 TTS(`text`+`voiceId`). 영상 기반은 pixverse-lipsync / infinite-talk(`videoUrl`, infinite-talk는 byResolution 480p 0.325 / 720p 0.65).
 
-## Lip-sync — fabric-1.0 talking photo (2026-07)
-- `/v1/video/lip-sync` 검증은 **모델 무관 필드 superset** (model-aware 아님, 실측): `videoUrl`, `imageUrl`, `audioUrl`, `text`, `voiceId`, `duration`(1~60), `resolution`(enum `480p/720p`). 모델별 필수 조합은 후단에서 `INVALID_INPUT`으로 검사(예: "imageUrl is required for fabric-1.0 model").
-- **fabric-1.0 / fabric-1.0-fast** (VEED): **정지 사진(`imageUrl`)을 말하는 얼굴로 애니메이션**(talking photo). 음성은 `audioUrl` 또는 **내장 TTS**(`text`+`voiceId`). 기존 영상 기반은 pixverse-lipsync / infinite-talk(`videoUrl`).
-- MCP 스키마는 전 필드 optional + 핸들러에서 모델 무관 최소치만 가드(얼굴 입력 video_url|image_url 중 1개, 음성 입력 audio_url|text 중 1개). 모델별 요구는 서버 위임(클라 화이트리스트 지양).
-- fabric은 audio 카테고리에도 lipsync로 중복 등재되어 있으나 엔드포인트는 동일 `/v1/video/lip-sync`.
-
-## Sound effect — 텍스트 기반 모델 (2026-07)
-- 신규 featureType `soundeffect-text`: `elevenlabs-sound-effects`, `stable-audio-sfx` — prompt가 주 입력. 단 **`videoUrl`은 모델 무관 endpoint 필수**(prompt-only는 400 REQUIRED, 실측 — 조건부 아님).
-- 인식 필드: `model`, `videoUrl`(필수), `prompt`, `duration`(1~30). `seed`/`text`는 미인식.
+## Sound effect — 텍스트 기반 모델 (2026-07, 변화 없음)
+- featureType `soundeffect-text`: `elevenlabs-sound-effects`, `stable-audio-sfx` — prompt가 주 입력. 단 **`videoUrl`은 모델 무관 endpoint 필수**(prompt-only는 400 REQUIRED). 인식 필드: `model`, `videoUrl`, `prompt`, `duration`(1~30), `webhookUrl`.
 
 ## 이미지 크기 지정 (모델 calType별, 중요)
 - 이미지 모델은 `calType`에 따라 출력 크기 지정 방식이 다름:
-  - **`perMegapixel` / `perImage`** (`flux.*`, `z-image-turbo`, `qwen-image-edit` 등) → `width`/`height` 사용.
-  - **`byResolution` / `byResolutionAndQuality`** (`gpt-image-2`, `seedream-4.0/4.5/5.0-pro`, `nano-banana-pro`, `nano-banana-2` + 각 `-edit`) → `resolution`(예: `"1K"`/`"2K"`/`"4K"`) + `aspect_ratio`(예: `"16:9"`) 사용. **`width`/`height`는 무시됨** (서버가 모델 전달 전 드롭 — 실측 확인). **단 `aspect_ratio:"custom"`이면 예외** — 아래 "임의 픽셀 사이즈(custom)" 참고.
+  - **`perMegapixel` / `perImage`** (`flux.*`, `z-image-turbo`, `qwen-image`, `wan-2.7`, `anima-base`, `netayume-v4`, `x-image-alpha` 등) → `width`/`height` 사용.
+  - **`byResolution` / `byResolutionAndQuality`** (`gpt-image-2`, `seedream-4.0/4.5/5.0-pro`, `nano-banana-pro`, `nano-banana-2` + 각 `-edit`) → `resolution`(`"1K"`/`"2K"`/`"4K"`, nano-banana-2는 `"0.5K"`도) + `aspect_ratio` 사용. **`width`/`height`는 무시됨**. **단 `aspect_ratio:"custom"`이면 예외**.
   - `gpt-image-2`/`-edit`(byResolutionAndQuality)만 `quality`(low/medium/high) 추가 지원. 미지정 시 서버 기본은 `high`(최고가).
-- `src/tools/image.ts`의 `RESOLUTION_BASED_MODELS`가 해상도 기반 모델에 `width`/`height`가 오면 제출 전 거부(런타임 가드). **예외: `aspect_ratio==="custom"`이면 통과**(임의 픽셀 사이즈 모드). 새 byResolution 모델 추가 시 이 상수를 `xbrush_list_models`의 calType과 맞춰 갱신.
-- **`gpt-image-2`/`-edit`가 받는 `aspect_ratio`** (2026-06 실측): `1K`/`2K`는 `1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1`(10종), `4K`는 `16:9, 9:16, 21:9, 1.91:1`(4종, wide만). 미지원 값 거부 방식이 해상도별로 다름 — `1K`/`2K`는 제출 `202` 후 처리 중 `failed`(과금되나 환불됨), `4K`는 제출 즉시 `400 VALIDATION_ERROR`. 서버 에러 메시지가 허용 목록을 그대로 반환하므로 새 비율은 미지원 값 1회 실호출로 역추적 가능. `aspect_ratio`/`resolution`은 free-form string으로 서버 미검증 통과(`quality`만 enum 검증)이고 모델·해상도·시점별로 목록이 달라 **클라이언트 화이트리스트 가드는 두지 않음**(false-rejection 위험) — describe로만 안내.
-- **임의 픽셀 사이즈(`aspect_ratio:"custom"`)** (2026-06-23 실측): `gpt-image-2`/`-edit`에 `aspect_ratio:"custom"` + `width`/`height`를 주면 **정확히 그 픽셀로 출력**(예: `1024×1152`, `1536×864` 그대로 반환 — `width`/`height`가 모델 페이로드에 그대로 전달됨). `width`/`height` **둘 다 필수**이고 **각각 16의 배수·최장변 ≤3840·총픽셀 655,360~8,294,400** 제약(위반·누락 시 제출 즉시 `400` + 제약 메시지 반환, 무과금 — 새 제약은 위반 값 1회 실호출로 역추적 가능). 비용은 해상도 티어(미지정 시 1K급)대로 과금. **정확 픽셀은 `gpt-image-2`/`-edit` 한정** — `seedream-4.5`는 비율만 유지하고 ~2K로 리스케일(`1024×1152`→`1824×2048`), `nano-banana-pro`는 `width`/`height` 무시하고 `2048×2048` 반환(고가). 그래서 `rejectWidthHeightForResolutionModel`은 `custom`이면 모델 무관 통과시키고, 모델별 차이는 스키마/도구 description으로만 안내(가드 화이트리스트 지양 — 위 `aspect_ratio`와 동일 철학).
+- `src/tools/image.ts`의 `RESOLUTION_BASED_MODELS`(2026-09-06 카탈로그 기준 변화 없음)가 해상도 기반 모델에 `width`/`height`가 오면 제출 전 거부(런타임 가드). **예외: `aspect_ratio==="custom"`이면 통과**.
+- **`gpt-image-2`/`-edit`가 받는 `aspect_ratio`** (2026-06 실측): `1K`/`2K`는 `1:1, 3:2, 2:3, 4:3, 3:4, 4:5, 16:9, 9:16, 21:9, 1.91:1`(10종), `4K`는 `16:9, 9:16, 21:9, 1.91:1`(4종). `aspect_ratio`/`resolution`은 free-form string(서버 미검증 통과)이라 **클라이언트 화이트리스트 가드는 두지 않음** — describe로만 안내.
+- **임의 픽셀 사이즈(`aspect_ratio:"custom"`)** (2026-06-23 실측): `gpt-image-2`/`-edit`에 `custom` + `width`/`height`(둘 다 필수, 16의 배수, 최장변 ≤3840, 총픽셀 655,360~8,294,400) → 정확히 그 픽셀. 정확 픽셀은 gpt-image-2 한정(seedream-4.5는 비율만 유지 ~2K, nano-banana-pro는 무시).
 
-## 다중 레퍼런스 이미지 (image edit, 중요)
-- `/v1/image/edit`는 **단일 `imageUrl`(필수, primary) + `imageUrls`(선택, 추가 레퍼런스 배열)** 을 받음. 서버가 `[imageUrl, ...imageUrls]`로 중복 제거 후 모델엔 `images` 배열로 전달 (실측 확인: `gpt-image-2-edit`에 노란 원 `imageUrl` + 초록 삼각형 `imageUrls` → 두 도형이 합쳐진 1장 반환).
-- `xbrush_image_edit` 스키마의 `image_urls`가 `imageUrls`로 매핑됨. `imageUrls`만 보내고 `imageUrl`을 빠뜨리면 422(`imageUrl` 필수).
-- 주의: 무과금 역추적 시 잘못된 모델명 게이트(`__nope__`)를 쓰면 이미지 처리 단계 전 `INVALID_MODEL`로 끊겨 `imageUrls` 소비 여부를 못 봄 — 다중 레퍼런스류는 유효 모델로 최저가 티어(예: `resolution:"1K", quality:"low"`) 실호출로 검증할 것.
+## 다중 레퍼런스 이미지 (image edit)
+- `/v1/image/edit`는 **단일 `imageUrl`(필수) + `imageUrls`(선택, 최대 9)**. 서버가 `[imageUrl, ...imageUrls]`로 중복 제거 후 모델엔 `images` 배열로 전달. `imageUrls`만 보내면 400(`imageUrl` 필수).
 
-## 비디오 generate — duration & reference-to-video (seedance 2.0, 중요)
-- `/v1/video/generate`의 검증은 **모델 인지(model-aware)**. 빈 body/오류 타입 POST 시 해당 모델 기준으로 인식 필드를 `error.fields[]`에 모두 반환 → 무과금 역추적 가능(`{model, prompt, <후보필드>:잘못된값}` 식). seedance-2.0 인식 필드(2026-06-25, 2026-06-26 재확인): `imageUrl`, `imageUrls`(array of `string | {url, role}`), `prompt`, `idea`, `duration`, `resolution`(enum `512p/768p/480p/720p/1080p/1440p/2160p/4k`), `aspectRatio`(enum `auto/adaptive/16:9/9:16/1:1/4:3/3:4/21:9`), `generateAudio`(bool), `consistencyMode`(enum `overlay/advanced/auto`; 서버 기본 `overlay` → 모델엔 `face_mesh_mode`로 매핑). `endImageUrl`은 seedance-2.0엔 미인식(end-frame 입력 없는 모델 — 끝프레임은 `imageUrls`의 `last_frame` role로). 미인식 필드는 strict가 아니라 **그냥 무시**됨. **MCP 노출**: `xbrush_video_generate`가 `prompt/idea/image_url/image_urls/end_image_url/duration/resolution/aspect_ratio/generate_audio/consistency_mode/prompt_relevance`를 camelCase로 매핑(2026-06-26 `idea`·`resolution`·`aspect_ratio`·`generate_audio`·`consistency_mode` 추가; `image_urls`는 union으로 객체배열 지원).
-- **`image_url`은 optional** — 과거 스키마가 필수로 강제했으나 오류. seedance-2.0는 t2v(prompt만)·reference-to-video(`image_urls`)에서 시작 프레임 불필요. 필요 입력은 모델이 결정(없으면 서버가 "prompt or idea required" 등으로 거부).
-- **`prompt` vs `idea`** (사용자 확인): `prompt`=**영어** 직접 입력(모델에 그대로), `idea`=**비영어**(예: 한국어 — 서버가 번역 후 모델 전달; 실측 페이로드에 한국어 `idea` + `translation_policy.target:"zh"` 동반). seedance는 `prompt` 또는 `idea` 중 하나 필요(서버가 "prompt or idea required" 검증). 둘 다 `xbrush_video_generate` 스키마에 optional로 노출(`idea`는 2026-06-26 추가). 둘 다에서 `reference_image` 항목을 `@Image1`,`@Image2`로 지칭.
-- **duration은 모델별 범위** (`xbrush_list_models`의 `constraints`로 노출: `{min,max,step,default}`). 과거 스키마 `5|10` 리터럴은 대부분 모델에서 오답(veo3 4–8, seedance-2.0/-fast 4–15 step1 default5, kling-v3/wan-2.7 ~15, wan-v2-2-14b min1). 스키마는 `int().min(1).max(20)`(generate 계열 관측 전 범위 커버)로 두고 모델별 정밀 범위는 **서버가 검증**(클라 화이트리스트 지양 — false-rejection 방지).
-- **reference-to-video(멀티 레퍼런스) — `imageUrls` 원소는 두 형식** (2026-06-26 실측): (a) URL 문자열, 또는 (b) **`{url, role}` 객체**. `role`은 `first_frame`(시작프레임)·`last_frame`(끝프레임)·`reference_image`(피사체/스타일/캐릭터 레퍼런스). 한 번의 호출에서 한 배열로 시작·끝 프레임 + 레퍼런스를 **통합 지정**. `role`은 optional(생략 시 모델이 결정). seedance-2.0/-fast의 `imageUrls` → 모델 `video_params.image_urls`로 **객체 그대로 전달**(실측: 입력 `[{url,role},…]`가 `input.video_params.image_urls`에 동일 echo. `imageUrl`(단일)은 `video_params.image`로 감). 문자열 배열은 **하위호환 유지**(혼합도 허용). 과거(v2.5.0) 단순 문자열 배열 → 객체배열로 확장된 것이 이 변경의 핵심. **`imageUrl` 없이 단독 사용 가능**(image edit과 달리 primary 필수 아님; `first_frame`도 `image_urls`에 role로 넣음 — 사용자 실측 페이로드에서 `image:""`, first_frame이 `image_urls`에 존재). `xbrush_video_generate` 스키마 `image_urls`(union: `string | {url, role}`) → `imageUrls` 그대로 매핑.
-- **`@ImageN` 넘버링 (오해 주의)**: prompt/idea의 `@Image1`,`@Image2`,…는 `image_urls`의 **1-based 배열 위치**(first_frame/last_frame 포함 전 항목)를 가리킴 — "N번째 reference"가 아님. 예: `[last_frame, reference_image]`면 reference는 `@Image2`(last_frame이 위치1). LLM이 reference를 무조건 `@Image1`로 쓰는 오해가 잦아(사용자 보고) `xbrush_video_generate`에 정합성 가드 추가(`src/tools/video.ts` `checkImageReferences`): prompt/idea의 `@Image(\d+)`를 파싱해 (a) 범위 초과, (b) frame role(first_frame/last_frame)을 가리키는 경우 **제출 전 에러로 차단**하고 실제 `위치→role` 매핑을 반환해 교정 유도. 올바른 위치(reference_image) 지칭·문자열 배열(role 없음, 범위만 체크)·`@` 없음은 통과. 스키마 description에도 동일 넘버링 규칙 명시.
-- **role 검증 주의**: 잘못된 `role`(예: `"banana"`)은 서버가 거부하지만 응답 메시지가 `"Generation rejected: input text may contain sensitive content"`로 **오인 표시**(content-moderation 메시지로 새는 버그성 응답) → role enum은 메시지로 역추적 불가. 허용 role은 실페이로드(`first_frame/last_frame/reference_image`)로 확인. role은 free-form string으로 두고 서버 검증에 위임(클라 화이트리스트 지양 — 위 `aspect_ratio` 철학과 동일).
-- **검증 방법(과금 주의)**: `imageUrls` 원소 URL은 잘못된 host/scheme면 제출 `202` 후 처리 중 `failed`(과금되나 **환불**됨, `credits.refunded` 확인). **단 video는 invalid host면 worker가 집기 전 폐기되어 `input.video_params` echo가 비어 있음** → 객체배열 전달 구조를 보려면 `assets.xbrush.ai`(host 허용목록 통과) URL로 **valid 실호출** 필요(과금됨). 최저가 = seedance-2.0-fast `480p`(0.0728 credit/sec, 예: 4s = 0.2912 credit). echo는 worker pickup 후 `pending` 상태에서도 채워짐.
-
-## 파일 업로드 플로우
-`xbrush_file_upload`에 `strategy` 파라미터로 경로 선택:
-
-- **auto (기본)**: 10MB 미만 → direct, 이상 → presign
-- **direct**: POST `/v1/files/upload` (multipart)
-- **presign**: POST `/v1/files/presign` → S3 직접 업로드
-
-반환된 CDN URL을 다른 도구의 `image_url`/`video_url`/`audio_url` 입력으로 사용.
+## 비디오 generate — reference-to-video (seedance 2.x, 중요)
+- **`image_url`은 optional** — t2v(prompt만)·reference-to-video(`image_urls`)에서 시작 프레임 불필요.
+- **`prompt` vs `idea`**: `prompt`=**영어**(모델에 그대로), `idea`=**비영어**(서버 번역 후 전달). 이제 image generate/edit, video edit/extend/retake도 동일하게 `idea`를 받음.
+- **`imageUrls` 원소는 두 형식**: URL 문자열 또는 **`{url, role}`**(`first_frame`/`last_frame`/`reference_image`). 한 배열로 시작·끝 프레임 + 레퍼런스 통합. 문자열 배열 하위호환·혼합 허용. `imageUrl` 없이 단독 사용 가능.
+- **`@ImageN` 넘버링 (오해 주의)**: `image_urls`의 **1-based 배열 위치**(frame role 포함). `src/tools/video.ts` `checkImageReferences` 가드가 범위 초과·frame 지칭을 제출 전에 차단(변화 없음).
+- **role 검증 주의**: 잘못된 `role`은 서버가 거부하지만 메시지가 `MODERATION_INPUT_TEXT`("sensitive content")로 새는 버그(2026-09-06 재확인). role은 free-form 유지.
 
 ## 도구 추가 패턴
 1. `src/schemas/<domain>.ts` — Zod 입력 스키마 정의 (strict, **`sync` 필드 추가 금지**)
-2. `src/tools/<domain>.ts` — `submitAsync` 헬퍼 사용 (async URL만 전달)
+2. `src/tools/<domain>.ts` — async면 `submitAsync`, 서버에 async 변형이 없는 동기 엔드포인트만 `callSync`(`services/dispatch.ts`)
 3. `src/index.ts` — 새 모듈이면 `registerXxxTools(server)` 등록
 4. `test/schemas/<domain>.test.ts` + `test/tools/<domain>.test.ts` 추가
-5. `test/integration/server.test.ts` + `test/integration/disabled-tools.test.ts`의 도구 개수/이름 목록 업데이트
+5. `test/integration/server.test.ts` + `test/integration/disabled-tools.test.ts`의 도구 개수/이름 목록 업데이트 (스냅샷은 `npx vitest run -u`)
 
 ## 테스트
-- **Vitest 4-tier**: `test/{schemas,services,tools,integration}/`
-- 현재 v2.11.0 기준 **411 케이스** 통과
+- **Vitest 4-tier**: `test/{schemas,services,tools,integration}/` (+ `test/schemas/survey-2026-09.test.ts`, `test/tools/survey-2026-09.test.ts`, `test/{schemas,tools}/media.test.ts`)
+- 현재 v2.12.0 기준 **524 케이스** 통과
 - `npm test` / `npm run test:watch`
 - 통합 테스트는 axios mock 사용, 실 API 호출 없음
-- MCP Inspector 또는 Claude Code에서 수동 E2E
+- e2e(`npm run test:e2e`, `XBRUSH_E2E_PAID=1`로 유료 파이프라인) — MCP Inspector 또는 Claude Code에서 수동 E2E
 
 ## 배포
 
@@ -174,11 +197,11 @@ npm publish --access public
 ## 규칙
 - 커밋 메시지: 한국어
 - Transport: stdio 전용
-- 도구 23개 (Image 5, Video 5, Audio 4, Text 1, Utility 8)
-  - Image: generate, edit, upscale, remove_bg, lora_train
-  - Video: generate, upscale, lip_sync, extend, retake
-  - Audio: tts_generate, music_generate, sound_effect_generate, voice_clone (동기)
-  - Text: chat (동기 LLM)
+- 도구 37개 (Image 12, Video 7, Audio 5, Text 1, Media 4, Utility 8)
+  - Image: generate, edit, outpaint, inpaint, enhance, layer_split, segment_detect(동기), vision(동기), product_lookup(동기), upscale, remove_bg, lora_train
+  - Video: generate, edit, vision, upscale, lip_sync, extend, retake
+  - Audio: tts_generate(+with_timestamps), stt_transcribe, music_generate, sound_effect_generate, voice_clone(동기)
+  - Text: chat(동기 LLM)
+  - Media: media_ffmpeg, media_image_process, media_graph, media_info(동기·무료)
   - Utility: content_moderate, watermark_add, list_models, list_voices, get_request, list_requests, file_upload, check_health
-- ~~미구현(차기): voice_clone, lora_train~~ → **2026-07-17 엔드포인트 활성화 확인 후 v2.11.0에서 구현 완료**
-- utility 모델 `gpt-4.1-nano`(featureType `prompt_enhance`/`image_to_prompt`)는 **공개 엔드포인트 미발견** (2026-07-15: /v1/prompt/enhance, /v1/utility/*, /v1/image/describe 등 후보 전부 404) — 내부 기능(예: idea 번역/프롬프트 보강)으로 추정, 도구화 대상 아님
+- utility 모델 `gpt-4.1-nano`(prompt_enhance/image_to_prompt)와 audio `seed-audio-1.0`은 **공개 엔드포인트 미발견**(2026-09-06 재확인) — 도구화 대상 아님

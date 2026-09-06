@@ -35,8 +35,9 @@ export const LoraTrainSchema = z
       .optional()
       .describe(
         "Base model to train the LoRA for — see xbrush_list_models entries with featureType " +
-          "'lora_train' (e.g. flux.1-dev, qwen-image, z-image-turbo, netayume-v4). NOT validated at " +
-          "submit: an unsupported model is accepted and fails during processing (refunded)."
+          "'lora_train' (flux.1-dev, qwen-image, z-image-turbo, netayume-v4, anima-base; the worker also " +
+          "accepts sdxl, animagine-xl-4.0, x-image-alpha). NOT validated at submit: an unsupported model " +
+          "is accepted and fails during processing (refunded) — re-verified 2026-09-06."
       ),
     trigger_word: z
       .string()

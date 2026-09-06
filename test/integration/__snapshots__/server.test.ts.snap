@@ -6,7 +6,7 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
   "additionalProperties": false,
   "properties": {
     "frequency_penalty": {
-      "description": "Penalize frequent tokens (-2 to 2).",
+      "description": "Penalize frequent tokens (-2 to 2). Ignored on models with constraints.penaltiesHonored:false (gemini, anthropic, grok).",
       "maximum": 2,
       "minimum": -2,
       "type": "number",
@@ -32,7 +32,7 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
                     "type": "string",
                   },
                   {
-                    "description": "Multimodal parts: {type:'text', text} and/or {type:'image_url', image_url:{url, detail?}}. Image parts require a vision-capable model (constraints.vision in xbrush_list_models, e.g. bytedance/seed-2.0-mini, max images per request in constraints.maxImages).",
+                    "description": "Multimodal parts: {type:'text', text} and/or {type:'image_url', image_url:{url, detail?}}. Image parts require a vision-capable model (constraints.vision in xbrush_list_models — all current models except glm-5.2 and deepseek-v4-flash; max images per request in constraints.maxImages).",
                     "items": {
                       "anyOf": [
                         {
@@ -62,7 +62,7 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
                               "additionalProperties": false,
                               "properties": {
                                 "detail": {
-                                  "description": "Vision fidelity vs. cost, passed through to the model vendor: 'low', 'high', or 'auto'. 'low' is drastically cheaper (~98 prompt tokens vs ~1,400 per image on seed-2.0-mini); omitted = vendor default (high-tier cost).",
+                                  "description": "Vision fidelity vs. cost, passed through to the model vendor: 'low', 'high', or 'auto'. 'low' is drastically cheaper (~98 prompt tokens vs ~1,400 per image on seed-2.0-mini; honored for billing on OpenAI models — constraints.imageDetailHonored); omitted = vendor default (high-tier cost).",
                                   "type": "string",
                                 },
                                 "url": {
@@ -101,7 +101,7 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
             "description": "Message content: a plain string, or an array of text/image_url parts (vision). Required (non-empty) on every message except an assistant message with tool_calls, where it may be empty, null, or omitted. For role:'tool' put the function's result here (commonly a JSON string).",
           },
           "role": {
-            "description": "Message author: system (instructions), user, assistant (prior model turns), or tool (a function result answering an assistant tool_call).",
+            "description": "Message author: system (instructions), user, assistant (prior model turns), or tool (a function result answering an assistant tool_call). ('developer' is not accepted.)",
             "enum": [
               "system",
               "user",
@@ -170,24 +170,86 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
       "type": "array",
     },
     "model": {
-      "description": "LLM model ID (e.g. z-ai/glm-5.2, bytedance/seed-2.0-mini, google/gemini-3.1-flash-lite). Use xbrush_list_models with category='text' to see options, per-token pricing, vision and function-calling support, and per-model param quirks.",
+      "description": "LLM model ID: z-ai/glm-5.2, bytedance/seed-2.0-mini, bytedance/seed-2.1-turbo, google/gemini-3.1-flash-lite, google/gemini-3.5-flash-lite, anthropic/claude-sonnet-5, anthropic/claude-opus-5, deepseek/deepseek-v4-flash, openai/gpt-4o, openai/gpt-4o-mini, openai/gpt-5.4, xai/grok-4.3. Use xbrush_list_models with category='text' to see per-token pricing, vision / function-calling / structured-output support, and per-model param quirks.",
       "type": "string",
     },
     "presence_penalty": {
-      "description": "Penalize tokens already present (-2 to 2).",
+      "description": "Penalize tokens already present (-2 to 2). Same penaltiesHonored caveat.",
       "maximum": 2,
       "minimum": -2,
       "type": "number",
     },
     "reasoning_effort": {
-      "description": "Reasoning budget for reasoning-capable models. Server default: none (fastest). Higher efforts can exceed the ~30s gateway limit — prefer none/minimal here.",
+      "description": "Reasoning budget for reasoning-capable models: none (server default, fastest) / minimal / low / medium / high / max. Per-model adjustments are reported as PARAM_ADJUSTED warnings (gemini: max→high, none→minimal; gpt-5.4: minimal→low, and tools force none; glm-5.2: low/medium→high; gpt-4o family has no reasoning). Higher efforts can exceed the ~30s gateway limit.",
       "enum": [
         "none",
         "minimal",
+        "low",
+        "medium",
         "high",
         "max",
       ],
       "type": "string",
+    },
+    "response_format": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "Ask for a syntactically valid JSON object (also mention JSON in the prompt).",
+          "properties": {
+            "type": {
+              "const": "json_object",
+              "type": "string",
+            },
+          },
+          "required": [
+            "type",
+          ],
+          "type": "object",
+        },
+        {
+          "additionalProperties": false,
+          "description": "Constrain the output to a JSON Schema (structured outputs).",
+          "properties": {
+            "json_schema": {
+              "additionalProperties": false,
+              "properties": {
+                "description": {
+                  "type": "string",
+                },
+                "name": {
+                  "description": "Schema name (required by OpenAI-compatible vendors).",
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "schema": {
+                  "additionalProperties": {},
+                  "description": "JSON Schema the output must conform to.",
+                  "type": "object",
+                },
+                "strict": {
+                  "description": "Strict schema adherence (OpenAI structured outputs).",
+                  "type": "boolean",
+                },
+              },
+              "required": [
+                "name",
+              ],
+              "type": "object",
+            },
+            "type": {
+              "const": "json_schema",
+              "type": "string",
+            },
+          },
+          "required": [
+            "type",
+            "json_schema",
+          ],
+          "type": "object",
+        },
+      ],
+      "description": "Structured output: {type:'json_object'} or {type:'json_schema', json_schema:{name, schema, strict?}}. Honored on models with constraints.structuredOutputHonored (openai/*, gemini-3.5-flash-lite); other models ignore it with a PARAM_DROPPED warning.",
     },
     "stop": {
       "anyOf": [
@@ -207,10 +269,10 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
           "type": "array",
         },
       ],
-      "description": "Stop sequence(s): generation halts before emitting any of these. A non-empty string or an array of 1-4.",
+      "description": "Stop sequence(s): generation halts before emitting any of these. A non-empty string or an array of 1-4. Ignored on xai/grok-4.3 (constraints.stopHonored:false).",
     },
     "temperature": {
-      "description": "Sampling temperature (0-2). Higher = more random.",
+      "description": "Sampling temperature (0-2). Higher = more random. Ignored (PARAM_DROPPED warning) on models with constraints.samplingHonored:false — anthropic/*, gemini-3.5-flash-lite, gpt-5.4.",
       "maximum": 2,
       "minimum": 0,
       "type": "number",
@@ -224,7 +286,7 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
         },
         {
           "additionalProperties": false,
-          "description": "Force one specific function. Only models with constraints.forcedChoiceHonored obey this (bytedance/seed-2.0-mini yes; z-ai/glm-5.2 picks its own tool and the response carries a PARAM_NOT_HONORED warning).",
+          "description": "Force one specific function. Only models with constraints.forcedChoiceHonored obey this (every current model except z-ai/glm-5.2, which picks its own tool and the response carries a PARAM_NOT_HONORED warning).",
           "properties": {
             "function": {
               "additionalProperties": false,
@@ -254,7 +316,7 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
       "description": "How the model may use \`tools\`: 'auto' (default), 'none', 'required', or {type:'function', function:{name}} to force one function (models with constraints.forcedChoiceHonored only — glm-5.2 ignores it with a PARAM_NOT_HONORED warning).",
     },
     "tools": {
-      "description": "Function definitions the model may call (OpenAI format; ≤32 functions, ≤32KB serialized). Works on models with constraints.functionCalling in xbrush_list_models. Tool schemas are billed as input tokens on EVERY request plus a fixed per-model overhead (constraints.toolsFixedTokens) — omit on requests that don't need them.",
+      "description": "Function definitions the model may call (OpenAI format; ≤32 functions, ≤32KB serialized). All current models support function calling (constraints.functionCalling). Tool schemas are billed as input tokens on EVERY request plus a fixed per-model overhead (constraints.toolsFixedTokens: 50-500) — omit on requests that don't need them.",
       "items": {
         "additionalProperties": false,
         "properties": {
@@ -296,7 +358,7 @@ exports[`도구 스키마 스냅샷 > xbrush_chat 1`] = `
       "type": "array",
     },
     "top_p": {
-      "description": "Nucleus sampling probability mass (0-1).",
+      "description": "Nucleus sampling probability mass (0-1). Same samplingHonored caveat as temperature.",
       "maximum": 1,
       "minimum": 0,
       "type": "number",
@@ -364,11 +426,31 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "minLength": 1,
       "type": "string",
     },
+    "background": {
+      "description": "Background handling for models that support it (e.g. gpt-image-2 transparent PNGs): auto (default), opaque, transparent.",
+      "enum": [
+        "auto",
+        "opaque",
+        "transparent",
+      ],
+      "type": "string",
+    },
+    "guidance_scale": {
+      "description": "Guidance scale (0-50) for diffusion edit models that expose it.",
+      "maximum": 50,
+      "minimum": 0,
+      "type": "number",
+    },
     "height": {
       "description": "Output height in pixels (256-4096) for megapixel-based models; for outpaint models, the target canvas height. Resolution-based edit models ignore it unless aspect_ratio:"custom" (see width).",
       "maximum": 4096,
       "minimum": 256,
       "type": "integer",
+    },
+    "idea": {
+      "description": "Non-English edit instruction (server-translated). Use prompt for English.",
+      "minLength": 1,
+      "type": "string",
     },
     "image_url": {
       "description": "URL of the primary source image to edit (also the first reference).",
@@ -376,12 +458,12 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "type": "string",
     },
     "image_urls": {
-      "description": "Additional reference image URLs for models that compose from multiple references (e.g. gpt-image-2-edit, nano-banana-edit). Appended after image_url, so the model receives [image_url, ...image_urls]. Omit for single-reference edits.",
+      "description": "Additional reference image URLs (max 9) for models that compose from multiple references (e.g. gpt-image-2-edit, nano-banana-edit, seedream-5.0-pro-edit). Appended after image_url, so the model receives [image_url, ...image_urls]. Omit for single-reference edits.",
       "items": {
         "format": "uri",
         "type": "string",
       },
-      "maxItems": 15,
+      "maxItems": 9,
       "minItems": 1,
       "type": "array",
     },
@@ -412,12 +494,12 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "type": "array",
     },
     "mask_url": {
-      "description": "Mask image URL. White areas = edit, black areas = preserve.",
+      "description": "Mask image URL. White areas = edit, black areas = preserve. (For object removal / plain hole-filling without a prompt, see xbrush_image_inpaint.)",
       "format": "uri",
       "type": "string",
     },
     "mode": {
-      "description": "Optional hint ('inpaint'/'outpaint'). The selected model ultimately determines the operation — pick an outpaint model to outpaint.",
+      "description": "Deprecated hint — the endpoint no longer recognizes it (ignored server-side). The selected model determines the operation; for outpainting prefer xbrush_image_outpaint.",
       "enum": [
         "inpaint",
         "outpaint",
@@ -425,7 +507,7 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "type": "string",
     },
     "model": {
-      "description": "Editing model. Inpaint/instruct-edit: qwen-image-edit, nano-banana-edit, seedream-5.0-pro-edit, flux.2-pro-edit. Outpaint: flux-outpaint, qwen-outpaint. Use xbrush_list_models(category='image').",
+      "description": "Editing model: qwen-image-edit, nano-banana-edit, nano-banana-2-edit, nano-banana-pro-edit, seedream-4.5-edit, seedream-5.0-pro-edit, flux.2-pro-edit, hunyuan-image-3.0-instruct-edit, gpt-image-2-edit. Use xbrush_list_models(category='image'), featureType 'edit'. For outpainting use xbrush_image_outpaint (dedicated endpoint) or an outpaint model here (flux-outpaint, qwen-outpaint, flux.2-pro-outpaint).",
       "type": "string",
     },
     "n": {
@@ -434,8 +516,12 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
       "minimum": 1,
       "type": "integer",
     },
+    "negative_prompt": {
+      "description": "Elements to exclude from the edited image.",
+      "type": "string",
+    },
     "prompt": {
-      "description": "Text instruction describing the desired edits.",
+      "description": "Text instruction describing the desired edits (English; use idea for other languages).",
       "minLength": 1,
       "type": "string",
     },
@@ -450,6 +536,11 @@ exports[`도구 스키마 스냅샷 > xbrush_image_edit 1`] = `
     },
     "resolution": {
       "description": "Output resolution tier for resolution-based edit models (gpt-image-2-edit, seedream-*-edit, nano-banana-pro/2-edit). Examples: "1K", "2K", "4K".",
+      "minLength": 1,
+      "type": "string",
+    },
+    "sampler": {
+      "description": "Sampler name for diffusion edit models that expose it (free-form, model-validated).",
       "minLength": 1,
       "type": "string",
     },
@@ -483,14 +574,40 @@ exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
       "minLength": 1,
       "type": "string",
     },
+    "background": {
+      "description": "Background handling for models that support it (e.g. gpt-image-2 transparent PNGs): auto (default), opaque, transparent.",
+      "enum": [
+        "auto",
+        "opaque",
+        "transparent",
+      ],
+      "type": "string",
+    },
+    "cfg": {
+      "description": "Classifier-free guidance scale (0-20) for diffusion models that expose it (flux.*, z-image-turbo, qwen-image, sdxl-family). Model default if omitted.",
+      "maximum": 20,
+      "minimum": 0,
+      "type": "number",
+    },
+    "guidance_scale": {
+      "description": "Guidance scale (0-50) — alias recognized by the endpoint for models that name the parameter guidance_scale. Prefer cfg unless the model documents guidance_scale.",
+      "maximum": 50,
+      "minimum": 0,
+      "type": "number",
+    },
     "height": {
       "description": "Output height in pixels (256-4096) for megapixel-based models. Default: 1024. Resolution-based models ignore it unless aspect_ratio:"custom" (see width).",
       "maximum": 4096,
       "minimum": 256,
       "type": "integer",
     },
+    "idea": {
+      "description": "Non-English description (e.g. Korean); the server translates it before generation. Use prompt for English text.",
+      "minLength": 1,
+      "type": "string",
+    },
     "loras": {
-      "description": "Apply trained LoRA(s): [{url, weight}] with the weights URL from xbrush_lora_train output and weight 0-2. Use with a LoRA-capable base model (e.g. flux.1-dev, qwen-image, z-image-turbo) and include the LoRA's trigger word in the prompt.",
+      "description": "Apply trained LoRA(s): [{url, weight}] with the weights URL from xbrush_lora_train output and weight 0-2. Use with a LoRA-capable base model (e.g. flux.1-dev, qwen-image, z-image-turbo, netayume-v4, anima-base) and include the LoRA's trigger word in the prompt.",
       "items": {
         "additionalProperties": false,
         "properties": {
@@ -516,7 +633,7 @@ exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
       "type": "array",
     },
     "model": {
-      "description": "Image model to use (e.g. z-image-turbo, flux.2-pro, seedream-5.0-pro, nano-banana-pro). Use xbrush_list_models to see available models.",
+      "description": "Image model to use (e.g. z-image-turbo, flux.2-pro, seedream-5.0-pro, nano-banana-2, gpt-image-2, hunyuan-image-3.0-instruct). Use xbrush_list_models(category='image') to see available models.",
       "type": "string",
     },
     "n": {
@@ -530,7 +647,7 @@ exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
       "type": "string",
     },
     "prompt": {
-      "description": "Text description of the image to generate.",
+      "description": "Text description of the image to generate (English recommended — for other languages use idea).",
       "minLength": 1,
       "type": "string",
     },
@@ -544,13 +661,28 @@ exports[`도구 스키마 스냅샷 > xbrush_image_generate 1`] = `
       "type": "string",
     },
     "resolution": {
-      "description": "Output resolution tier for resolution-based models (gpt-image-2, seedream-*, nano-banana-pro/2). Examples: "1K", "2K", "4K". Ignored by megapixel-based models — use width/height for those.",
+      "description": "Output resolution tier for resolution-based models (gpt-image-2, seedream-*, nano-banana-pro/2). Examples: "1K", "2K", "4K" (nano-banana-2 also "0.5K"). Ignored by megapixel-based models — use width/height for those.",
+      "minLength": 1,
+      "type": "string",
+    },
+    "sampler": {
+      "description": "Sampler name for diffusion models that expose it (free-form, passed through; model-validated).",
+      "minLength": 1,
+      "type": "string",
+    },
+    "scheduler": {
+      "description": "Diffusion scheduler name for models that expose it. Server currently accepts "simple" only (rejects others with the allowed list).",
       "minLength": 1,
       "type": "string",
     },
     "seed": {
       "description": "Random seed for reproducible results.",
       "type": "integer",
+    },
+    "trigger_word": {
+      "description": "LoRA trigger word to prepend/inject when generating with a trained LoRA (alternative to writing it in the prompt yourself).",
+      "minLength": 1,
+      "type": "string",
     },
     "width": {
       "description": "Output width in pixels (256-4096) for megapixel-based models (flux.*, z-image-turbo, etc.). Default: 1024. Resolution-based models (gpt-image-2, seedream-*, nano-banana-*) normally ignore it — but with aspect_ratio:"custom", gpt-image-2/-edit output exactly width×height (both required).",
@@ -594,13 +726,18 @@ exports[`도구 스키마 스냅샷 > xbrush_music_generate 1`] = `
   "additionalProperties": false,
   "properties": {
     "duration": {
-      "description": "Duration in seconds (1-120). Conservative upper bound; may be lifted by server.",
-      "maximum": 120,
-      "minimum": 1,
+      "description": "Requested duration in seconds (5-300). Model may round to its native clip length (lyria3 returned ~30s for a 5s request).",
+      "maximum": 300,
+      "minimum": 5,
       "type": "integer",
     },
+    "image_url": {
+      "description": "Optional reference image URL — the model derives mood/style from it (image-conditioned music).",
+      "format": "uri",
+      "type": "string",
+    },
     "model": {
-      "description": "Music model ID (e.g. lyria2, lyria3, lyria3-pro). Optional — server picks a default.",
+      "description": "Music model ID: lyria2 (0.13 credits/track), lyria3 (0.052), lyria3-pro (0.104). Optional — server picks a default; other values are rejected with the supported list.",
       "type": "string",
     },
     "negative_prompt": {
@@ -608,7 +745,7 @@ exports[`도구 스키마 스냅샷 > xbrush_music_generate 1`] = `
       "type": "string",
     },
     "prompt": {
-      "description": "Text description of the music to generate.",
+      "description": "Text description of the music to generate (genre, mood, instruments, tempo).",
       "minLength": 1,
       "type": "string",
     },
@@ -629,13 +766,39 @@ exports[`도구 스키마 스냅샷 > xbrush_tts_generate 1`] = `
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
   "properties": {
+    "emotion": {
+      "description": "Emotion preset (MiniMax voices): happy, sad, angry, fearful, disgusted, surprised, calm, fluent, whisper.",
+      "enum": [
+        "happy",
+        "sad",
+        "angry",
+        "fearful",
+        "disgusted",
+        "surprised",
+        "calm",
+        "fluent",
+        "whisper",
+      ],
+      "type": "string",
+    },
     "language": {
-      "description": "Language/locale code (e.g. 'ko', 'en', 'ko-KR').",
+      "description": "DEPRECATED — the endpoint no longer recognizes a language field (ignored). Voices are multilingual; write the text in the target language.",
       "type": "string",
     },
     "model": {
-      "description": "TTS model ID (e.g. eleven-v3, speech-2.8-hd). Optional — server default is a Minimax model (which needs voice_id). Use xbrush_list_models with category='audio'.",
+      "description": "TTS model ID: eleven-v3 (ElevenLabs, 0.12 credits/1k chars, works without voice_id), speech-2.8-hd / speech-2.8-turbo / speech-2.6-hd (MiniMax, need a moss_audio_* voice_id), seed-tts-2.0 (ByteDance preset voices, 0.039) or seed-icl-2.0 (ByteDance, needs a cloned xbseed_* voice_id, 0.039). Optional — server default is a MiniMax model (which needs voice_id). See xbrush_list_models(category='audio').",
       "type": "string",
+    },
+    "output_format": {
+      "description": "Requested audio container/format hint passed to the provider (e.g. 'mp3', 'wav'). Provider-dependent — eleven-v3 returned mp3 regardless in testing; Seed voices return wav.",
+      "minLength": 1,
+      "type": "string",
+    },
+    "pitch": {
+      "description": "Pitch shift in semitones (-12..12) for providers that support it (MiniMax). Default 0.",
+      "maximum": 12,
+      "minimum": -12,
+      "type": "number",
     },
     "speed": {
       "description": "Speech rate multiplier (0.5-2.0). Default: 1.0.",
@@ -643,14 +806,25 @@ exports[`도구 스키마 스냅샷 > xbrush_tts_generate 1`] = `
       "minimum": 0.5,
       "type": "number",
     },
+    "style": {
+      "description": "Style exaggeration 0-1 (ElevenLabs style knob). Default provider-defined.",
+      "maximum": 1,
+      "minimum": 0,
+      "type": "number",
+    },
     "text": {
-      "description": "Text to synthesize (non-blank).",
+      "description": "Text to synthesize (non-blank, ≤10,000 characters).",
+      "maxLength": 10000,
       "minLength": 1,
       "type": "string",
     },
     "voice_id": {
-      "description": "Voice identifier. REQUIRED for Minimax models (speech-*); get one from xbrush_list_voices. ElevenLabs (eleven-v3) works without it.",
+      "description": "Voice identifier. REQUIRED for MiniMax speech-* (moss_audio_* from xbrush_list_voices(model='speech-2.8-hd')), seed-icl-2.0 (xbseed_* from xbrush_voice_clone) and seed-tts-2.0 (preset name). For eleven-v3 a preset name like 'Rachel' or 'Aria' (xbrush_list_voices(model='eleven-v3')); omit for the default.",
       "type": "string",
+    },
+    "with_timestamps": {
+      "description": "true → use the timestamped variant (POST /v1/tts-wt/generate): the result carries character-level start/end times (alignment arrays) for subtitles/karaoke. Only model, voice_id, speed and style apply on that path; it completes inline (~2-7s) and the audio + alignment are read back with xbrush_get_request.",
+      "type": "boolean",
     },
   },
   "required": [

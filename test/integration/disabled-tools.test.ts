@@ -26,6 +26,7 @@ import { registerWatermarkTools } from "../../src/tools/watermark.js";
 import { registerModerationTools } from "../../src/tools/moderation.js";
 import { registerVoiceTools } from "../../src/tools/voice.js";
 import { registerLoraTools } from "../../src/tools/lora.js";
+import { registerMediaTools } from "../../src/tools/media.js";
 import { applyDisableFilter, parseDisabledTools } from "../../src/tool-filter.js";
 
 type ToolDef = { name: string };
@@ -53,6 +54,7 @@ async function spinServer(disabledRaw: string | undefined): Promise<{
   registerModelTools(mcpServer);
   registerVoiceTools(mcpServer);
   registerLoraTools(mcpServer);
+  registerMediaTools(mcpServer);
   registerFileUploadTools(mcpServer);
   report();
 
@@ -75,17 +77,17 @@ describe("XBRUSH_DISABLED_TOOLS 통합", () => {
     servers = [];
   });
 
-  it("환경변수 없으면 23개 모두 노출", async () => {
+  it("환경변수 없으면 37개 모두 노출", async () => {
     const s = await spinServer(undefined);
     servers.push(s);
-    expect(s.tools.map((t) => t.name).length).toBe(23);
+    expect(s.tools.map((t) => t.name).length).toBe(37);
   });
 
   it("단일 도구 비활성 → tools/list에서 제외", async () => {
     const s = await spinServer("xbrush_tts_generate");
     servers.push(s);
     const names = s.tools.map((t) => t.name);
-    expect(names.length).toBe(22);
+    expect(names.length).toBe(36);
     expect(names).not.toContain("xbrush_tts_generate");
     expect(names).toContain("xbrush_music_generate"); // 다른 도구는 살아있음
   });
@@ -94,7 +96,7 @@ describe("XBRUSH_DISABLED_TOOLS 통합", () => {
     const s = await spinServer("xbrush_tts_generate,xbrush_music_generate,xbrush_watermark_add");
     servers.push(s);
     const names = s.tools.map((t) => t.name);
-    expect(names.length).toBe(20);
+    expect(names.length).toBe(34);
     expect(names).not.toContain("xbrush_tts_generate");
     expect(names).not.toContain("xbrush_music_generate");
     expect(names).not.toContain("xbrush_watermark_add");
@@ -106,7 +108,7 @@ describe("XBRUSH_DISABLED_TOOLS 통합", () => {
     servers.push(s);
     const names = s.tools.map((t) => t.name);
     expect(names).not.toContain("xbrush_tts_generate");
-    expect(names.length).toBe(22);
+    expect(names.length).toBe(36);
   });
 
   it("모든 도구 비활성", async () => {
@@ -117,21 +119,35 @@ describe("XBRUSH_DISABLED_TOOLS 통합", () => {
       "xbrush_file_upload",
       "xbrush_get_request",
       "xbrush_image_edit",
+      "xbrush_image_enhance",
       "xbrush_image_generate",
+      "xbrush_image_inpaint",
+      "xbrush_image_layer_split",
+      "xbrush_image_outpaint",
+      "xbrush_image_product_lookup",
       "xbrush_image_remove_bg",
+      "xbrush_image_segment_detect",
       "xbrush_image_upscale",
+      "xbrush_image_vision",
       "xbrush_list_models",
       "xbrush_list_requests",
       "xbrush_list_voices",
       "xbrush_lora_train",
+      "xbrush_media_ffmpeg",
+      "xbrush_media_graph",
+      "xbrush_media_image_process",
+      "xbrush_media_info",
       "xbrush_music_generate",
       "xbrush_sound_effect_generate",
+      "xbrush_stt_transcribe",
       "xbrush_tts_generate",
+      "xbrush_video_edit",
       "xbrush_video_extend",
       "xbrush_video_generate",
       "xbrush_video_lip_sync",
       "xbrush_video_retake",
       "xbrush_video_upscale",
+      "xbrush_video_vision",
       "xbrush_voice_clone",
       "xbrush_watermark_add",
     ].join(",");

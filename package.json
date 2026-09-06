@@ -1,7 +1,7 @@
 {
   "name": "@lweight/xbrush-api-mcp",
-  "version": "2.11.0",
-  "description": "MCP server for the XBrush AI media generation API (image, video, TTS, music, sound effects, lip-sync & talking photos, video extend/retake, LLM chat, content moderation, watermark)",
+  "version": "2.12.0",
+  "description": "MCP server for the XBrush AI media generation API (image generate/edit/outpaint/inpaint/layer-split, OCR & object detection & product lookup, video generate/edit/extend/retake/analysis, TTS with timestamps, STT, music, sound effects, lip-sync & talking photos, voice cloning, LoRA training, LLM chat, ffmpeg/image/graph media pipelines, moderation, watermark)",
   "license": "MIT",
   "author": "Lightweight Inc. <dev@lightweight.kr>",
   "repository": {
@@ -19,6 +19,9 @@
     "ai",
     "llm",
     "chat-completions",
+    "speech-to-text",
+    "ocr",
+    "ffmpeg",
     "image-generation",
     "video-generation",
     "audio-generation",

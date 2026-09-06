@@ -60,7 +60,7 @@ describe("TtsGenerateSchema", () => {
 
   it("미정의 필드 거부 (strict)", () => {
     expect(() =>
-      TtsGenerateSchema.parse({ ...base, emotion: "happy" })
+      TtsGenerateSchema.parse({ ...base, genre: "jazz" })
     ).toThrow();
   });
 });
@@ -92,8 +92,9 @@ describe("MusicGenerateSchema", () => {
     expect(() => MusicGenerateSchema.parse({ ...base, duration: 0 })).toThrow();
   });
 
-  it("duration 120 초과 거부", () => {
-    expect(() => MusicGenerateSchema.parse({ ...base, duration: 121 })).toThrow();
+  it("duration 범위(5-300) 밖 거부", () => {
+    expect(() => MusicGenerateSchema.parse({ ...base, duration: 4 })).toThrow();
+    expect(() => MusicGenerateSchema.parse({ ...base, duration: 301 })).toThrow();
   });
 
   it("prompt 공백만 거부", () => {

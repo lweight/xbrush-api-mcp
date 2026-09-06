@@ -5,48 +5,46 @@ import { z } from "zod";
  *
  * OpenAI-compatible request. Field names are passed to the API as-is (the
  * endpoint itself uses snake_case), so no camelCase mapping happens here.
- * Constraints below were reverse-engineered live from the endpoint's
- * validation errors (2026-07-15, re-surveyed same day for the vision update);
- * the server normalizes `max_tokens` into `max_completion_tokens` internally.
+ * Constraints were reverse-engineered live from the endpoint's validation
+ * errors (2026-07-15, re-surveyed 2026-09-06); the server normalizes
+ * `max_tokens` into `max_completion_tokens` internally.
  *
- * Vision (2026-07 update): `content` accepts either a plain string or an
- * array of parts. Recognized part types are exactly `text` and `image_url`
- * ("unknown content part type" otherwise). Image inputs work only on models
- * whose constraints report vision:true (see xbrush_list_models category
- * 'text'); non-vision models reject image parts at submit time (400, no
- * billing). Both https URLs and data: URLs are accepted (no host allowlist
- * on this endpoint, unlike the media endpoints). Upstream vendor limits:
- * min image dimension 14px, at most `constraints.maxImages` images per
- * request — both validated server-side with clear errors, so no client
- * whitelist here. `image_url.detail` is passed through to the vendor
- * (low/high/auto, OpenAI-style) and strongly affects billing: measured
- * prompt_tokens ~98 with low vs ~1,390-1,396 with high/auto/omitted on
- * seed-2.0-mini. Kept as free-form string — the vendor validates values.
+ * Recognized fields (2026-09-06): model, messages, max_tokens /
+ * max_completion_tokens (1-65536), temperature (0-2), top_p (0-1),
+ * frequency_penalty / presence_penalty (-2..2), stop, reasoning_effort
+ * (none/minimal/low/medium/high/max — low & medium are new), tools,
+ * tool_choice, parallel_tool_calls (false → 400), stream (true → 400 pointing
+ * at POST /v1/stream/chat/completions), response_format (json_object |
+ * json_schema — NEW). Still unrecognized/ignored: n, seed, logprobs,
+ * top_logprobs, logit_bias, user, metadata, stream_options.
  *
- * Function calling (2026-07-16, server-announced + re-verified live on prod):
- * `tools` / `tool_choice` are now recognized (OpenAI format). The model
- * answers with finish_reason "tool_calls" and message.tool_calls whose
- * `function.arguments` is a JSON-encoded STRING. To continue, the assistant
- * message is echoed back verbatim (tool_calls included; its content may be
- * "" or null) followed by one {role:"tool", tool_call_id, content} message
- * per call — the server 400s if any tool_call is left unanswered before the
- * next user message. Server-enforced limits (clear 400s, so mirrored here
- * only where documented as contract): ≤32 functions, function name
- * ^[a-zA-Z0-9_-]{1,64}$, ≤32KB serialized tools (not client-checked).
- * Models: constraints.functionCalling in xbrush_list_models; forced
- * tool_choice is honored per constraints.forcedChoiceHonored (seed-2.0-mini
- * yes, glm-5.2 no — glm picks its own tool and the response carries a
- * top-level warnings[] entry {code:"PARAM_NOT_HONORED", param:"tool_choice"}).
+ * Model lineup (12, GET /v1/models/text): z-ai/glm-5.2, bytedance/seed-2.0-mini,
+ * bytedance/seed-2.1-turbo, google/gemini-3.1-flash-lite, google/gemini-3.5-flash-lite,
+ * anthropic/claude-sonnet-5, anthropic/claude-opus-5, deepseek/deepseek-v4-flash,
+ * openai/gpt-4o, openai/gpt-4o-mini, openai/gpt-5.4, xai/grok-4.3. Per-model
+ * parameter quirks are published as `constraints` flags and, when a parameter
+ * is dropped/adjusted, reported in the response's top-level `warnings[]`
+ * (PARAM_DROPPED / PARAM_ADJUSTED / PARAM_NOT_HONORED) instead of erroring.
+ *
+ * Vision: `content` accepts a plain string or an array of parts. Recognized
+ * part types are exactly `text` and `image_url` (input_audio / video_url /
+ * file → "unknown content part type"). Image inputs work only on models whose
+ * constraints report vision:true; both https and data: URLs are accepted.
+ * `image_url.detail` (low/high/auto) is passed through; it changes billing on
+ * models with imageDetailHonored (OpenAI) and measurably on seed-2.0-mini too
+ * (~98 vs ~1,390 prompt tokens).
+ *
+ * Function calling (2026-07-16): `tools` / `tool_choice` OpenAI format; the
+ * model answers with finish_reason "tool_calls" and message.tool_calls whose
+ * `function.arguments` is a JSON-encoded STRING. Echo the assistant message
+ * back verbatim followed by one {role:"tool", tool_call_id, content} per call.
+ * Limits: ≤32 functions, name ^[a-zA-Z0-9_-]{1,64}$, ≤32KB serialized.
  *
  * Not exposed on purpose:
- * - `stream`: MCP stdio tools return a single result; streaming has no wire.
- *   (The server also 400s stream:true outright — "stream is not supported
- *   yet" — with or without tools; re-verified 2026-07-18.)
- * - `parallel_tool_calls`: server 400s on `false` ("not supported yet") —
- *   models may emit several tool_calls per turn regardless; answer them all.
- * - `n` / `seed` / `response_format` / `logprobs` / `logit_bias` /
- *   `stream_options`: unrecognized by the endpoint (it silently ignores
- *   unknown fields — it is NOT strict). Re-checked 2026-07-15.
+ * - `stream`: MCP stdio tools return a single result (the sync path 400s
+ *   stream:true and points at /v1/stream/chat/completions — an SSE endpoint
+ *   that has no place in a stdio tool).
+ * - `parallel_tool_calls`: server 400s on `false` ("not supported yet").
  * - `max_completion_tokens`: redundant with `max_tokens`.
  */
 
@@ -78,8 +76,8 @@ export const ChatImageUrlPartSchema = z
           .optional()
           .describe(
             "Vision fidelity vs. cost, passed through to the model vendor: 'low', 'high', or 'auto'. " +
-              "'low' is drastically cheaper (~98 prompt tokens vs ~1,400 per image on seed-2.0-mini); " +
-              "omitted = vendor default (high-tier cost)."
+              "'low' is drastically cheaper (~98 prompt tokens vs ~1,400 per image on seed-2.0-mini; " +
+              "honored for billing on OpenAI models — constraints.imageDetailHonored); omitted = vendor default (high-tier cost)."
           ),
       })
       .strict(),
@@ -114,7 +112,7 @@ export const ChatMessageSchema = z
     role: z
       .enum(["system", "user", "assistant", "tool"])
       .describe(
-        "Message author: system (instructions), user, assistant (prior model turns), or tool (a function result answering an assistant tool_call)."
+        "Message author: system (instructions), user, assistant (prior model turns), or tool (a function result answering an assistant tool_call). ('developer' is not accepted.)"
       ),
     content: z
       .union([
@@ -129,8 +127,7 @@ export const ChatMessageSchema = z
           .min(1)
           .describe(
             "Multimodal parts: {type:'text', text} and/or {type:'image_url', image_url:{url, detail?}}. " +
-              "Image parts require a vision-capable model (constraints.vision in xbrush_list_models, " +
-              "e.g. bytedance/seed-2.0-mini, max images per request in constraints.maxImages)."
+              "Image parts require a vision-capable model (constraints.vision in xbrush_list_models — all current models except glm-5.2 and deepseek-v4-flash; max images per request in constraints.maxImages)."
           ),
       ])
       .nullable()
@@ -235,9 +232,41 @@ export const ChatToolChoiceSchema = z.union([
     .strict()
     .describe(
       "Force one specific function. Only models with constraints.forcedChoiceHonored obey this " +
-        "(bytedance/seed-2.0-mini yes; z-ai/glm-5.2 picks its own tool and the response carries a " +
+        "(every current model except z-ai/glm-5.2, which picks its own tool and the response carries a " +
         "PARAM_NOT_HONORED warning)."
     ),
+]);
+
+/**
+ * response_format (new 2026-09): {type:"json_object"} or
+ * {type:"json_schema", json_schema:{name, schema, strict?, description?}}.
+ * The gateway validates the shape (400 "response_format.type must be
+ * json_object or json_schema" / "requires a json_schema object"); the vendor
+ * validates the schema itself (e.g. OpenAI requires json_schema.name → 400
+ * INVALID_INPUT with the upstream message). Applied only on models whose
+ * constraints report structuredOutputHonored (OpenAI gpt-4o/-mini/gpt-5.4,
+ * gemini-3.5-flash-lite); others ignore it with a PARAM_DROPPED warning
+ * (verified: seed-2.0-mini, glm-5.2 still answered JSON-ish text).
+ */
+export const ChatResponseFormatSchema = z.union([
+  z
+    .object({ type: z.literal("json_object") })
+    .strict()
+    .describe("Ask for a syntactically valid JSON object (also mention JSON in the prompt)."),
+  z
+    .object({
+      type: z.literal("json_schema"),
+      json_schema: z
+        .object({
+          name: z.string().min(1).describe("Schema name (required by OpenAI-compatible vendors)."),
+          schema: z.record(z.unknown()).optional().describe("JSON Schema the output must conform to."),
+          strict: z.boolean().optional().describe("Strict schema adherence (OpenAI structured outputs)."),
+          description: z.string().optional(),
+        })
+        .strict(),
+    })
+    .strict()
+    .describe("Constrain the output to a JSON Schema (structured outputs)."),
 ]);
 
 export const ChatCompletionSchema = z
@@ -245,9 +274,10 @@ export const ChatCompletionSchema = z
     model: z
       .string()
       .describe(
-        "LLM model ID (e.g. z-ai/glm-5.2, bytedance/seed-2.0-mini, google/gemini-3.1-flash-lite). " +
-          "Use xbrush_list_models with category='text' to see options, per-token pricing, vision and " +
-          "function-calling support, and per-model param quirks."
+        "LLM model ID: z-ai/glm-5.2, bytedance/seed-2.0-mini, bytedance/seed-2.1-turbo, google/gemini-3.1-flash-lite, " +
+          "google/gemini-3.5-flash-lite, anthropic/claude-sonnet-5, anthropic/claude-opus-5, deepseek/deepseek-v4-flash, " +
+          "openai/gpt-4o, openai/gpt-4o-mini, openai/gpt-5.4, xai/grok-4.3. Use xbrush_list_models with category='text' " +
+          "to see per-token pricing, vision / function-calling / structured-output support, and per-model param quirks."
       ),
     messages: z
       .array(ChatMessageSchema)
@@ -268,25 +298,25 @@ export const ChatCompletionSchema = z
       .min(0)
       .max(2)
       .optional()
-      .describe("Sampling temperature (0-2). Higher = more random."),
+      .describe("Sampling temperature (0-2). Higher = more random. Ignored (PARAM_DROPPED warning) on models with constraints.samplingHonored:false — anthropic/*, gemini-3.5-flash-lite, gpt-5.4."),
     top_p: z
       .number()
       .min(0)
       .max(1)
       .optional()
-      .describe("Nucleus sampling probability mass (0-1)."),
+      .describe("Nucleus sampling probability mass (0-1). Same samplingHonored caveat as temperature."),
     frequency_penalty: z
       .number()
       .min(-2)
       .max(2)
       .optional()
-      .describe("Penalize frequent tokens (-2 to 2)."),
+      .describe("Penalize frequent tokens (-2 to 2). Ignored on models with constraints.penaltiesHonored:false (gemini, anthropic, grok)."),
     presence_penalty: z
       .number()
       .min(-2)
       .max(2)
       .optional()
-      .describe("Penalize tokens already present (-2 to 2)."),
+      .describe("Penalize tokens already present (-2 to 2). Same penaltiesHonored caveat."),
     stop: z
       .union([
         z.string().min(1).describe("A single stop sequence (non-empty)."),
@@ -298,24 +328,29 @@ export const ChatCompletionSchema = z
       ])
       .optional()
       .describe(
-        "Stop sequence(s): generation halts before emitting any of these. A non-empty string or an array of 1-4."
+        "Stop sequence(s): generation halts before emitting any of these. A non-empty string or an array of 1-4. Ignored on xai/grok-4.3 (constraints.stopHonored:false)."
       ),
     reasoning_effort: z
-      .enum(["none", "minimal", "high", "max"])
+      .enum(["none", "minimal", "low", "medium", "high", "max"])
       .optional()
       .describe(
-        "Reasoning budget for reasoning-capable models. Server default: none (fastest). " +
-          "Higher efforts can exceed the ~30s gateway limit — prefer none/minimal here."
+        "Reasoning budget for reasoning-capable models: none (server default, fastest) / minimal / low / medium / high / max. " +
+          "Per-model adjustments are reported as PARAM_ADJUSTED warnings (gemini: max→high, none→minimal; gpt-5.4: minimal→low, " +
+          "and tools force none; glm-5.2: low/medium→high; gpt-4o family has no reasoning). Higher efforts can exceed the ~30s gateway limit."
       ),
+    response_format: ChatResponseFormatSchema.optional().describe(
+      "Structured output: {type:'json_object'} or {type:'json_schema', json_schema:{name, schema, strict?}}. " +
+        "Honored on models with constraints.structuredOutputHonored (openai/*, gemini-3.5-flash-lite); other models ignore it with a PARAM_DROPPED warning."
+    ),
     tools: z
       .array(ChatToolSchema)
       .max(32)
       .optional()
       .describe(
         "Function definitions the model may call (OpenAI format; ≤32 functions, ≤32KB serialized). " +
-          "Works on models with constraints.functionCalling in xbrush_list_models. Tool schemas are " +
+          "All current models support function calling (constraints.functionCalling). Tool schemas are " +
           "billed as input tokens on EVERY request plus a fixed per-model overhead " +
-          "(constraints.toolsFixedTokens) — omit on requests that don't need them."
+          "(constraints.toolsFixedTokens: 50-500) — omit on requests that don't need them."
       ),
     tool_choice: ChatToolChoiceSchema.optional().describe(
       "How the model may use `tools`: 'auto' (default), 'none', 'required', or " +

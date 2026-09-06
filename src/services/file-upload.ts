@@ -18,19 +18,47 @@ import type { UploadStrategy } from "../schemas/file-upload.js";
 /** Files smaller than this use direct upload when strategy = 'auto'. */
 export const DIRECT_UPLOAD_THRESHOLD = 10 * 1024 * 1024; // 10 MB
 
+/**
+ * Extension → MIME map. Mirrors the server's presign allowlist
+ * (POST /v1/files/presign `mimeType` enum, re-read 2026-09-06): images (jpeg,
+ * png, gif, webp, svg, avif, heic/heif), video (mp4, mov, webm, mpeg-ts, avi,
+ * mkv), audio (mp3, wav, m4a/mp4, aac, flac, ogg, webm), text (txt, vtt, srt),
+ * and safetensors / m3u8 / zip.
+ */
 const MIME_MAP: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".avif": "image/avif",
+  ".heic": "image/heic",
+  ".heif": "image/heif",
   ".mp4": "video/mp4",
+  ".m4v": "video/mp4",
+  ".mov": "video/quicktime",
   ".webm": "video/webm",
+  ".ts": "video/mp2t",
+  ".avi": "video/x-msvideo",
+  ".mkv": "video/x-matroska",
   ".mp3": "audio/mpeg",
   ".wav": "audio/wav",
+  ".m4a": "audio/mp4",
+  ".aac": "audio/aac",
+  ".flac": "audio/flac",
+  ".ogg": "audio/ogg",
+  ".oga": "audio/ogg",
+  ".weba": "audio/webm",
+  ".txt": "text/plain",
+  ".vtt": "text/vtt",
+  ".srt": "application/x-subrip",
+  ".safetensors": "application/x-safetensors",
+  ".m3u8": "application/vnd.apple.mpegurl",
+  ".zip": "application/zip",
 };
 
-function getMimeType(filePath: string): string {
+export function getMimeType(filePath: string): string {
   const ext = extname(filePath).toLowerCase();
   return MIME_MAP[ext] || "application/octet-stream";
 }

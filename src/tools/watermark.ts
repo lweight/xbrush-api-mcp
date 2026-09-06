@@ -15,12 +15,13 @@ export function registerWatermarkTools(server: McpServer): void {
       title: "Add Watermark",
       description: [
         "Apply the XBrush watermark to a target image or video.",
-        "The watermark content is fixed by the server — no customization is accepted.",
+        "The watermark content is fixed by the server — only its visibility (strength) can be chosen.",
         "Submits async — poll the returned request_id with xbrush_get_request.",
         "",
         "Args:",
         "  image_url (string, optional): Target image URL.",
         "  video_url (string, optional): Target video URL (one of image_url/video_url required).",
+        "  strength (string, optional): low | medium | high.",
       ].join("\n"),
       inputSchema: WatermarkAddSchema,
       annotations: {
@@ -34,6 +35,7 @@ export function registerWatermarkTools(server: McpServer): void {
       const body: Record<string, unknown> = {};
       if (args.image_url !== undefined) body.imageUrl = args.image_url;
       if (args.video_url !== undefined) body.videoUrl = args.video_url;
+      if (args.strength !== undefined) body.strength = args.strength;
 
       return submitAsync({
         url: "/v1/watermark/add",

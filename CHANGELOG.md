@@ -1,5 +1,70 @@
 # Changelog
 
+## 2.12.0 — 2026-09-06
+
+**Breaking changes:** None — every existing tool keeps its inputs. Fields the server stopped recognizing over the summer (`xbrush_video_generate.end_image_url` / `prompt_relevance`, `xbrush_image_edit.mode`, `xbrush_tts_generate.language`) are still accepted but marked deprecated (the server silently ignores them). Two limits moved to match the server: `xbrush_image_edit.image_urls` now allows at most 9 references (was 15), and `xbrush_image_upscale.upscale_factor` is a number 1.5-4 (was integer 2-4).
+
+Full re-survey of `api.xbrush.run` (model catalog 128 entries; every endpoint's field inventory reverse-engineered from validation errors and confirmed with live calls). The platform grew a lot since July: 14 new endpoints, 9 new chat models, structured output, request filters, webhooks, and a whole media-processing family. This release exposes all of it — **23 → 37 tools**.
+
+### Added
+
+- **Image (7 new tools)**
+  - `xbrush_image_outpaint` — dedicated `/v1/image/outpaint` (previously 404): `canvas_width`/`canvas_height` (64-4096, required), `scale` (0.05-4), `prompt`, `resolution` (1K/2K/4K). Output is exactly the canvas size (verified 1792×1408); charged 0 credits in testing.
+  - `xbrush_image_inpaint` — `/v1/image/inpaint`: prompt-less content-aware fill/removal. `mask` accepts an https URL, a `data:image/png;base64` URL, or a raw base64 PNG (all three verified live); plus `resolution`, `num_inference_steps` (1-100), `seed`, `expand` (0-128).
+  - `xbrush_image_enhance` — `/v1/image/enhance` (`mode`, `n` 1-4, `seed`). Both live test jobs timed out on the GPU worker after 600s without charge, so the tool description flags it as experimental.
+  - `xbrush_image_layer_split` — `/v1/image/layer-split` (seedream-5.0-pro-layerize 0.55 credits @1K / 1.1 @2K, or qwen-image-layered): returns `layers[] {name, zIndex, boundingBox, description}` aligned with `imageUrls[]` (verified on a poster: background / product / text layers). Plain photos may be rejected by the vendor (refunded).
+  - `xbrush_image_segment_detect` — **synchronous** open-vocabulary detection (`/v1/image/segment-detect`, 0.01 credits): pixel boxes + scores for a text prompt (1-120 chars).
+  - `xbrush_image_vision` — **synchronous** OCR (`/v1/image/vision`, 0.003 credits): items with normalized bboxes, full text, locale; `mode` text/document; accepts data: URLs.
+  - `xbrush_image_product_lookup` — **synchronous** brand/product identification (`/v1/image/product-lookup`, flat 0.05 credits): product name/category/specs, brand + domain, vision entities; `language` en/ko/ja/zh, `mode` fast/grounded.
+  - `xbrush_image_generate` — new fields `idea` (non-English prompt, server-translated), `cfg` (0-20), `guidance_scale` (0-50), `scheduler`, `sampler`, `background` (auto/opaque/transparent), `trigger_word`.
+  - `xbrush_image_edit` — new fields `idea`, `negative_prompt`, `background`, `guidance_scale`, `sampler`.
+  - `xbrush_image_upscale` — `target_height` (256-8192; verified 1408px → 2048×2048) as an alternative to the factor.
+- **Video (2 new tools)**
+  - `xbrush_video_edit` — `/v1/video/edit` with gemini-omni-1.1-flash (0.143 credits/sec): prompt-driven whole-video transformation; `audio` source/model/none. Verified: 5s clip → 0.858 credits, ~2 min.
+  - `xbrush_video_vision` — `/v1/video/vision` (0.003 credits/sec): whisper transcript with timed segments + on-screen text of sampled frames.
+  - `xbrush_video_generate` — new fields `negative_prompt`, `seed`, `audio_url`, `width`/`height` (with `aspect_ratio:"custom"`), `fps` (24/25/48/50), `steps`, `acceleration` (none/regular/high); `duration` up to 30s (seedance-2.5 / wan-3.0); `resolution` gains `2k`. Validation is no longer model-aware (one superset for all models). 12 new video models in the catalog (seedance-2.5, kling-v3-omni, kling-o1/o3/o3-ref, minimax-h3/-ref, wan-3.0-video ×4, gemini-omni-1.1-flash, ltx-2.3, veo3.1/-fast).
+  - `xbrush_video_extend` — `prompt`/`idea`, `negative_prompt`, `start_time`, `resolution` (360p-1080p), `generate_audio`, `style` (anime/3d_animation/clay/comic/cyberpunk), `seed`; new model gemini-omni-1.1-flash.
+  - `xbrush_video_retake` — `start_time` (0-20), `prompt`/`idea`; `end_time` capped at 40.
+- **Audio (1 new tool)**
+  - `xbrush_stt_transcribe` — `/v1/stt/transcribe` (whisper-1, 0.00013 credits/sec, async). **WAV only** (the server checks the RIFF header; mp3 is rejected at submit) — convert with `xbrush_media_ffmpeg` extract-audio → wav. Output `{text, language, duration}` verified on a 28s clip.
+  - `xbrush_tts_generate` — `with_timestamps:true` routes to the new `/v1/tts-wt/generate` and returns character-level alignment arrays (subtitles/karaoke); new knobs `pitch` (-12..12), `style` (0-1), `emotion` (9 MiniMax presets), `output_format`. New TTS models seed-tts-2.0 / seed-icl-2.0 (0.039 credits/1k chars) and speech-2.8-turbo; the tool explains which models need which `voice_id` (server messages: MiniMax → moss_audio_*, seed-icl-2.0 → cloned xbseed_*, seed-tts-2.0 → preset name).
+  - `xbrush_music_generate` — `duration` range is now 5-300 and `image_url` (image-conditioned music) is accepted; lyria3 verified (~30s track for 0.052 credits).
+- **Media utilities (4 new tools, category `utility`)**
+  - `xbrush_media_ffmpeg` — `/v1/media/ffmpeg`: 1-10 inputs → 1-20 ops (trim, concat, transcode, scale, extract-audio, thumbnail, watermark, gif, speed, crop, rotate, fade, subtitle, merge-audio, still) → output format/fps/quality. Billed per output second (h264 0.0004 credits, floor 0.002); a 2s trim cost 0.002 and took ~2s.
+  - `xbrush_media_image_process` — `/v1/media/image`: 37 deterministic ops (resize/crop/pad/composite/stack/text/adjust/blur/… /straighten_document) with server-validated ranges; ~0.0006 credits for a resize.
+  - `xbrush_media_graph` — `/v1/media/graph`: ffmpeg filter-graph IR with ~60 ops (overlay, xfade, chromakey, lut3d, drawtext, zoompan, amix, loudnorm, set_audio, …). Ports and per-op params were enumerated from the server's error messages and are summarized in the tool description; `GET /v1/media/fonts` (206 fonts incl. Korean) and `GET /v1/media/luts` back drawtext/lut3d.
+  - `xbrush_media_info` — `GET /v1/media/info?url=` (free, synchronous): video/image metadata probe.
+- **Chat**
+  - `response_format` — `{type:"json_object"}` or `{type:"json_schema", json_schema:{name, schema, strict}}`; honored on models with `constraints.structuredOutputHonored` (openai/*, gemini-3.5-flash-lite), ignored elsewhere with a `PARAM_DROPPED` warning (verified on gpt-4o-mini, seed-2.0-mini, glm-5.2).
+  - `reasoning_effort` gains `low` and `medium` (server enum is now none/minimal/low/medium/high/max).
+  - 9 new models documented: bytedance/seed-2.1-turbo, google/gemini-3.5-flash-lite, anthropic/claude-sonnet-5, anthropic/claude-opus-5, deepseek/deepseek-v4-flash, openai/gpt-4o, openai/gpt-4o-mini, openai/gpt-5.4, xai/grok-4.3 (all verified live). `xbrush_list_models` renders the new per-model quirk flags (structured output, temperature/top_p ignored, stop ignored, no reasoning, reasoning tier remaps, tools forcing reasoning none, image detail honored).
+- **Voices**
+  - `xbrush_voice_clone` — verified end to end (MiniMax and Seed): billing is a flat **2 credits** (eleven / speech-2.8-hd / speech-2.6-hd) or **2.6 credits** (seed-icl-2.0) — no longer 50; the tool now fetches the request record after the synchronous 202 and prints the `voice_id`, provider, demo audio and remaining retrain runs. New `model` value `seed-icl-2.0` and `voice_id` (xbseed_*) to retrain an existing Seed voice.
+  - `xbrush_list_voices` — `voice_id` argument returns one voice's detail (`GET /v1/voice/{voiceId}`); TTS model ids (eleven-v3, speech-2.8-turbo) are mapped onto the server's provider enum (eleven / speech-2.8-hd / speech-2.6-hd / seed-icl-2.0) instead of 400ing.
+- **Requests**
+  - `xbrush_list_requests` — `domain`, `action`, `status` (pending/processing/completed/failed/timeout/aborted) filters; rows show `credits.refunded` and `createdAt`.
+  - `xbrush_get_request` — renders every new output shape (layer-split layers, media job thumbnails/durations, STT text, video-vision transcript segments, tts-wt alignment, voice-clone data) and keeps unknown keys as compact JSON; shows refunds and the new timeout/aborted statuses.
+- `xbrush_content_moderate` — `threshold` (0-1) and image `mode` (mosaic). `xbrush_watermark_add` — `strength` (low/medium/high).
+- `xbrush_file_upload` — MIME map extended to the server's presign allowlist (svg, avif, heic, mov, mkv, avi, ts, m4a, aac, flac, ogg, txt, vtt, srt, safetensors, m3u8, zip).
+- `XBrushModel` types — `output` contract metadata and the new `constraints` keys; `XBrushRequestDetail` — `credits`, `originalBody`, timing arrays; `XBrushAsyncResponse` — `pollUrl`, inline `completed`.
+
+### Changed
+
+- `xbrush_lora_train` — the worker's supported base list is now FLUX.1-dev, z-image-turbo, sdxl, animagine-xl-4.0, netayume-v4, anima, qwen-image, x-image-alpha (catalog: flux.1-dev, z-image-turbo, qwen-image, netayume-v4, anima-base).
+- `xbrush_video_upscale` — `model` is server-validated against realesrgan / seedvr.
+- Tool descriptions refreshed with measured prices and the current model lineups throughout.
+
+### Not exposed (documented in CLAUDE.md)
+
+- `webhookUrl` (accepted by every async endpoint) — no receiver in a stdio MCP context.
+- `POST /v1/stream/chat/completions` (SSE) and the `/sync` variants.
+- `DELETE /v1/voice/{voiceId}` — answers VOICE_NOT_FOUND for voices that GET returns (server bug as of 2026-09-06).
+- `DELETE /v1/requests/{id}` — returns `{success:true}` but the record remains readable.
+
+### Tests
+
+- 411 → 524 unit + integration tests (new schema/tool files for media and the 2026-09 survey; refreshed snapshots for image_generate, image_edit, tts_generate, music_generate, chat).
+
 ## 2.9.0 — 2026-07-15
 
 **Breaking changes:** None. Plain-string `content` keeps working; this release adds vision content parts and `stop` on top. One tightening: empty-string message content is now rejected client-side, matching the server ("content must not be empty").

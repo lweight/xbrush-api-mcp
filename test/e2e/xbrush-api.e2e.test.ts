@@ -25,6 +25,7 @@ import { registerWatermarkTools } from "../../src/tools/watermark.js";
 import { registerModerationTools } from "../../src/tools/moderation.js";
 import { registerVoiceTools } from "../../src/tools/voice.js";
 import { registerChatTools } from "../../src/tools/chat.js";
+import { registerMediaTools } from "../../src/tools/media.js";
 
 const hasApiKey = !!process.env.XBRUSH_API_KEY;
 const paidOk = process.env.XBRUSH_E2E_PAID === "1";
@@ -47,6 +48,7 @@ beforeAll(async () => {
   registerVoiceTools(server);
   registerFileUploadTools(server);
   registerChatTools(server);
+  registerMediaTools(server);
 
   client = new Client({ name: "e2e", version: "0" });
   const [ct, st] = InMemoryTransport.createLinkedPair();
@@ -109,32 +111,49 @@ describe("api.xbrush.run — 서버 reachability (무료)", () => {
     expect(resp.status).toBe(401);
   });
 
-  it("16개 엔드포인트 경로 유효 (401 MISSING_API_KEY)", async () => {
+  it("33개 엔드포인트 경로 유효 (401 MISSING_API_KEY)", async () => {
     const paths = [
       "/v1/image/generate",
       "/v1/image/edit",
       "/v1/image/upscale",
       "/v1/image/remove-background",
       "/v1/image/moderate",
+      "/v1/image/outpaint",
+      "/v1/image/inpaint",
+      "/v1/image/enhance",
+      "/v1/image/layer-split",
+      "/v1/image/segment-detect",
+      "/v1/image/vision",
+      "/v1/image/product-lookup",
       "/v1/video/generate",
       "/v1/video/upscale",
       "/v1/video/lip-sync",
       "/v1/video/extend",
       "/v1/video/retake",
       "/v1/video/moderate",
+      "/v1/video/edit",
+      "/v1/video/vision",
       "/v1/tts/generate",
+      "/v1/tts-wt/generate",
+      "/v1/stt/transcribe",
       "/v1/music/generate",
       "/v1/sound-effect/generate",
+      "/v1/voice/clone",
+      "/v1/lora/train",
+      "/v1/chat/completions",
+      "/v1/media/ffmpeg",
+      "/v1/media/image",
+      "/v1/media/graph",
       "/v1/watermark/add",
-      "/v1/files/upload",
+      "/v1/files/presign",
     ];
     for (const p of paths) {
       const resp = await fetch(`https://api.xbrush.run${p}`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: "{}",
       });
-      expect(resp.status, `path ${p}`).toBe(401);
+      expect(resp.status, p).toBe(401);
     }
   });
 });
@@ -173,6 +192,18 @@ describe.runIf(hasApiKey)("MCP 도구 → 실 API (무과금)", () => {
     const r = await callTool("xbrush_list_voices", {});
     expect(r.isError).toBe(false);
     expect(r.text).toContain("# Voices");
+  });
+
+  it("list_requests (domain/status 필터)", async () => {
+    const r = await callTool("xbrush_list_requests", { limit: 3, domain: "image", status: "completed" });
+    expect(r.isError).toBe(false);
+    expect(r.text).toContain("# Requests");
+  });
+
+  it("media_info (무과금 동기 프로브 — 읽을 수 없는 URL도 200)", async () => {
+    const r = await callTool("xbrush_media_info", { url: "https://assets.xbrush.ai/nope.mp4" });
+    expect(r.isError).toBe(false);
+    expect(r.text).toContain("Media info");
   });
 });
 
@@ -372,6 +403,87 @@ describe.runIf(hasApiKey && paidOk)("유료 풀 파이프라인 (크레딧 소�
     const reqId = extractRequestId(r.text);
     const done = await pollUntilDone(reqId!, { maxMs: 10 * 60_000 });
     expect(["completed", "timeout"]).toContain(done.status);
+  });
+
+  it("16 image_vision + segment_detect + product_lookup (동기 분석 3종, ~0.063 credit)", async () => {
+    if (!state.imageUrl) return;
+    const ocr = await callTool("xbrush_image_vision", { image_url: state.imageUrl });
+    expect(ocr.isError).toBe(false);
+    expect(ocr.text).toContain("Image OCR");
+    const seg = await callTool("xbrush_image_segment_detect", { image_url: state.imageUrl, prompt: "cat" });
+    expect(seg.isError).toBe(false);
+    expect(seg.text).toMatch(/Detect "cat"/);
+    const prod = await callTool("xbrush_image_product_lookup", { image_url: state.imageUrl, mode: "fast" });
+    expect(prod.isError).toBe(false);
+    expect(prod.text).toContain("Product lookup");
+  });
+
+  it("17 image_outpaint (dedicated endpoint, async+poll)", async () => {
+    if (!state.imageUrl) return;
+    const r = await callTool("xbrush_image_outpaint", {
+      image_url: state.imageUrl,
+      canvas_width: 1280,
+      canvas_height: 1024,
+      prompt: "continue the scene",
+    });
+    expect(r.isError).toBe(false);
+    const id = extractRequestId(r.text)!;
+    const done = await pollUntilDone(id);
+    expect(done.status).toBe("completed");
+    expect(done.text).toContain("1280×1024");
+  });
+
+  it("18 media_ffmpeg trim → wav + stt_transcribe (WAV 전용, ~0.006 credit)", async () => {
+    if (!state.videoUrl) return;
+    const ff = await callTool("xbrush_media_ffmpeg", {
+      inputs: [state.videoUrl],
+      operations: [{ op: "trim", start: 0, end: 3 }, { op: "extract-audio" }],
+      output: { format: "wav" },
+    });
+    expect(ff.isError).toBe(false);
+    const ffDone = await pollUntilDone(extractRequestId(ff.text)!);
+    expect(ffDone.status).toBe("completed");
+    const wavUrl = ffDone.url;
+    if (!wavUrl) return;
+    const stt = await callTool("xbrush_stt_transcribe", { audio_url: wavUrl });
+    expect(stt.isError).toBe(false);
+    const sttDone = await pollUntilDone(extractRequestId(stt.text)!);
+    expect(sttDone.status).toBe("completed");
+    expect(sttDone.text).toContain("Transcript");
+  });
+
+  it("19 media_image_process resize (async+poll, ~0.001 credit)", async () => {
+    if (!state.imageUrl) return;
+    const r = await callTool("xbrush_media_image_process", {
+      inputs: [state.imageUrl],
+      operations: [{ op: "resize", width: 256 }],
+      output: { format: "webp" },
+    });
+    expect(r.isError).toBe(false);
+    const done = await pollUntilDone(extractRequestId(r.text)!);
+    expect(done.status).toBe("completed");
+    expect(done.text).toContain("256×");
+  });
+
+  it("20 tts with_timestamps (tts-wt, inline completed + alignment)", async () => {
+    const r = await callTool("xbrush_tts_generate", {
+      text: "Timestamps test one two three.",
+      model: "eleven-v3",
+      with_timestamps: true,
+    });
+    expect(r.isError).toBe(false);
+    const done = await pollUntilDone(extractRequestId(r.text)!);
+    expect(done.status).toBe("completed");
+    expect(done.text).toContain("Character alignment");
+  });
+
+  it("21 video_vision (transcript + on-screen text, ~0.02 credit)", async () => {
+    if (!state.videoUrl) return;
+    const r = await callTool("xbrush_video_vision", { video_url: state.videoUrl, language: "en" });
+    expect(r.isError).toBe(false);
+    const done = await pollUntilDone(extractRequestId(r.text)!);
+    expect(done.status).toBe("completed");
+    expect(done.text).toContain("Speech transcript");
   });
 
   it("15 chat function calling (seed-2.0-mini, 동기 2-turn 라운드트립)", async () => {

@@ -210,9 +210,9 @@ describe("VideoGenerateSchema", () => {
     expect(() => VideoGenerateSchema.parse({ ...base, duration: 5.5 })).toThrow();
   });
 
-  it("duration 범위(1-20) 밖 거부", () => {
+  it("duration 범위(1-30) 밖 거부", () => {
     expect(() => VideoGenerateSchema.parse({ ...base, duration: 0 })).toThrow();
-    expect(() => VideoGenerateSchema.parse({ ...base, duration: 21 })).toThrow();
+    expect(() => VideoGenerateSchema.parse({ ...base, duration: 31 })).toThrow();
   });
 
   it("prompt_relevance=0 유효", () => {
@@ -332,7 +332,7 @@ describe("VideoExtendSchema", () => {
 
   it("미정의 필드 거부 (strict)", () => {
     expect(() =>
-      VideoExtendSchema.parse({ ...base, prompt: "x" })
+      VideoExtendSchema.parse({ ...base, unknown_field: "x" })
     ).toThrow();
   });
 });

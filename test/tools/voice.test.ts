@@ -75,63 +75,95 @@ describe("xbrush_list_voices", () => {
   });
 });
 
-describe("xbrush_voice_clone (2026-07-17, 동기)", () => {
+describe("xbrush_voice_clone (동기 — 202 completed + record 조회)", () => {
   const ARGS = {
     name: "My Voice",
     audio_urls: ["https://assets.xbrush.ai/sample.mp3"],
   };
+  const SUBMIT = {
+    requestId: "req" + "c".repeat(21),
+    status: "completed",
+    domain: "voice",
+    action: "clone",
+    creditCharged: 2,
+    pollUrl: "/v1/requests/req" + "c".repeat(21),
+  };
+  const RECORD = {
+    ...SUBMIT,
+    credits: { charged: 2, refunded: 0, balance_after: 100 },
+    output: {
+      success: true,
+      data: {
+        name: "My Voice",
+        provider: "minimax",
+        voice_id: "moss_audio_abc",
+        demo_audio_url: "https://cdn/demo.mp3",
+      },
+    },
+  };
 
-  it("/v1/voice/clone POST + TIMEOUT_VOICE_CLONE (동기 — async 제출 아님)", async () => {
-    mockedApi.mockResolvedValueOnce({ voice_id: "voc_123" });
+  it("/v1/voice/clone POST + TIMEOUT_VOICE_CLONE, 이어서 GET /v1/requests/{id}", async () => {
+    mockedApi.mockResolvedValueOnce(SUBMIT).mockResolvedValueOnce(RECORD);
     const result = await handlers.get("xbrush_voice_clone")!(ARGS);
-    const args = mockedApi.mock.calls.at(-1)![0] as any;
-    expect(args.url).toBe("/v1/voice/clone");
-    expect(args.method).toBe("POST");
-    expect(args.timeout).toBe(TIMEOUT_VOICE_CLONE);
+    const calls = mockedApi.mock.calls.slice(-2).map((c) => c[0] as any);
+    expect(calls[0].url).toBe("/v1/voice/clone");
+    expect(calls[0].method).toBe("POST");
+    expect(calls[0].timeout).toBe(TIMEOUT_VOICE_CLONE);
+    expect(calls[1].url).toBe(`/v1/requests/${SUBMIT.requestId}`);
+    expect(calls[1].method).toBe("GET");
     expect(result.content[0].text).not.toContain("submitted (async)");
   });
 
-  it("snake_case → camelCase 매핑 (audio_urls/remove_background_noise)", async () => {
-    mockedApi.mockResolvedValueOnce({ voice_id: "voc_123" });
+  it("snake_case → camelCase 매핑 (audio_urls/remove_background_noise/voice_id)", async () => {
+    mockedApi.mockResolvedValueOnce(SUBMIT).mockResolvedValueOnce(RECORD);
     await handlers.get("xbrush_voice_clone")!({
       ...ARGS,
-      model: "eleven",
+      model: "seed-icl-2.0",
+      voice_id: "xbseed_existing",
       description: "d",
       remove_background_noise: true,
     });
-    const args = mockedApi.mock.calls.at(-1)![0] as any;
+    const args = mockedApi.mock.calls.at(-2)![0] as any;
     expect(args.data).toEqual({
       name: "My Voice",
       audioUrls: ["https://assets.xbrush.ai/sample.mp3"],
-      model: "eleven",
+      model: "seed-icl-2.0",
+      voiceId: "xbseed_existing",
       description: "d",
       removeBackgroundNoise: true,
     });
   });
 
-  it("voice_id 응답 → tts 연계 안내 렌더", async () => {
-    mockedApi.mockResolvedValueOnce({ voice_id: "voc_123", provider: "minimax" });
+  it("record output.data.voice_id → tts 연계 안내 렌더 (모델 매핑 eleven→eleven-v3)", async () => {
+    mockedApi.mockResolvedValueOnce(SUBMIT).mockResolvedValueOnce(RECORD);
+    const result = await handlers.get("xbrush_voice_clone")!({ ...ARGS, model: "eleven" });
+    expect(result.isError).toBeFalsy();
+    const text = result.content[0].text as string;
+    expect(text).toContain("moss_audio_abc");
+    expect(text).toContain("xbrush_tts_generate");
+    expect(text).toContain("eleven-v3");
+    expect(text).toContain("My Voice");
+    expect(text).toContain("https://cdn/demo.mp3");
+    expect(text).toContain("Credits charged**: 2");
+  });
+
+  it("record 조회 실패 → 봉투만으로 안내 (request_id + get_request 힌트)", async () => {
+    mockedApi.mockResolvedValueOnce({ ...SUBMIT, status: "pending" }).mockRejectedValueOnce(new Error("boom"));
     const result = await handlers.get("xbrush_voice_clone")!(ARGS);
     expect(result.isError).toBeFalsy();
     const text = result.content[0].text as string;
-    expect(text).toContain("voc_123");
-    expect(text).toContain("xbrush_tts_generate");
-    expect(text).toContain("My Voice");
+    expect(text).toContain(SUBMIT.requestId);
+    expect(text).toContain("xbrush_get_request");
   });
 
-  it("voice_id 없는 미지 형태 응답 → 원본 JSON echo + list_voices 안내", async () => {
-    mockedApi.mockResolvedValueOnce({ result: { something: "else" } });
+  it("voice id 없는 미지 형태 record → 원본 JSON echo + list_voices 안내", async () => {
+    mockedApi
+      .mockResolvedValueOnce(SUBMIT)
+      .mockResolvedValueOnce({ ...RECORD, output: { result: { something: "else" } } });
     const result = await handlers.get("xbrush_voice_clone")!(ARGS);
-    expect(result.isError).toBeFalsy();
     const text = result.content[0].text as string;
     expect(text).toContain("xbrush_list_voices");
     expect(text).toContain('"something": "else"');
-  });
-
-  it("data.voiceId 중첩 형태에서도 id 탐지", async () => {
-    mockedApi.mockResolvedValueOnce({ data: { voiceId: "voc_nested" } });
-    const result = await handlers.get("xbrush_voice_clone")!(ARGS);
-    expect(result.content[0].text).toContain("voc_nested");
   });
 
   it("업스트림 에러(슬롯 만석 등) → isError", async () => {
